@@ -1,0 +1,2 @@
+{{MARKER}}
+@AGENTS.md

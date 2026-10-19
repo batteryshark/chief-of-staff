@@ -1,0 +1,12 @@
+#!/bin/sh
+{{MARKER}}
+# OpenChamber's own command line (session list|create|send|fork|status|messages, models, projects),
+# run through the installed app so no separate global install is needed. --goal on create/send
+# turns on goal mode for that session.
+APP="${OPENCHAMBER_APP:-/Applications/OpenChamber.app}"
+CLI="$APP/Contents/Resources/app.asar/node_modules/@openchamber/web/bin/cli.js"
+if [ ! -x "$APP/Contents/MacOS/OpenChamber" ]; then
+  echo "chief-openchamber: OpenChamber is not installed at $APP (set OPENCHAMBER_APP)" >&2
+  exit 1
+fi
+exec env ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/OpenChamber" "$CLI" "$@"

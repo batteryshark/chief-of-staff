@@ -1,0 +1,18 @@
+{{MARKER}}
+# Codex profile: codex --profile chief-of-staff
+# This file layers on top of ~/.codex/config.toml and only adds instructions.
+# developer_instructions is additive, so Codex keeps its built-in system prompt.
+developer_instructions = '''
+{{PROMPT}}
+
+## Host: Codex
+
+**Delegation.** Use Codex subagents (spawn_agent, then wait_agent; send_input for a follow-up,
+close_agent when finished) for repository work, when this session has them. Use the fleet tools
+from the shell for other providers and for Claude Code or Antigravity. Codex subagents cannot ask
+you questions while they run, so use the QUESTION: form of the worker instruction.
+
+**Visual channel.** Use the fenced detail block. The voice tool reads only your final message and
+skips fenced blocks. For longer material, write the file in the brief directory and put its path
+in the detail block.
+'''

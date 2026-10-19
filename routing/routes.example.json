@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "routes": [
+    {
+      "id": "gpt-quick",
+      "host": "local",
+      "model": "openai/gpt-6-luna",
+      "variant": "medium",
+      "source": "codex",
+      "provider": "codex",
+      "account": "",
+      "pool": "codex-default",
+      "windows": "all",
+      "categories": [
+        "trivial",
+        "research"
+      ],
+      "max_parallel": 2,
+      "reserve_percent": 5,
+      "priority": 1
+    },
+    {
+      "id": "gpt-strong",
+      "host": "local",
+      "model": "openai/gpt-6.1-sol",
+      "variant": "high",
+      "source": "codex",
+      "provider": "codex",
+      "account": "",
+      "pool": "codex-default",
+      "windows": "all",
+      "categories": [
+        "research",
+        "implement",
+        "hard"
+      ],
+      "max_parallel": 2,
+      "reserve_percent": 5
+    },
+    {
+      "id": "claude-quick",
+      "host": "local",
+      "model": "claude-code/claude-haiku-5-5",
+      "variant": "medium",
+      "source": "claude",
+      "provider": "claude",
+      "account": "",
+      "pool": "claude-default",
+      "windows": "all",
+      "categories": [
+        "trivial",
+        "research"
+      ],
+      "max_parallel": 2,
+      "reserve_percent": 5,
+      "priority": 1
+    },
+    {
+      "id": "claude-mid",
+      "host": "local",
+      "model": "claude-code/claude-sonnet-5-5[1m]",
+      "variant": "high",
+      "source": "claude",
+      "provider": "claude",
+      "account": "",
+      "pool": "claude-default",
+      "windows": "all",
+      "categories": [
+        "research",
+        "implement"
+      ],
+      "max_parallel": 2,
+      "reserve_percent": 5,
+      "priority": 1
+    },
+    {
+      "id": "claude-strong",
+      "host": "local",
+      "model": "claude-code/claude-opus-5-5[1m]",
+      "variant": "high",
+      "source": "claude",
+      "provider": "claude",
+      "account": "",
+      "pool": "claude-default",
+      "windows": "all",
+      "categories": [
+        "research",
+        "implement",
+        "hard"
+      ],
+      "max_parallel": 2,
+      "reserve_percent": 5
+    },
+    {
+      "id": "gemini-quick",
+      "host": "local",
+      "model": "agy/gemini-3.8-flash-medium",
+      "variant": "medium",
+      "source": "antigravity",
+      "provider": "antigravity",
+      "account": "",
+      "pool": "antigravity-default",
+      "windows": [
+        "5h \u00b7 gemini",
+        "weekly \u00b7 gemini"
+      ],
+      "categories": [
+        "trivial",
+        "research"
+      ],
+      "max_parallel": 2,
+      "reserve_percent": 5,
+      "priority": 1
+    },
+    {
+      "id": "gemini-strong",
+      "host": "local",
+      "model": "agy/gemini-3.1-pro-high",
+      "variant": "high",
+      "source": "antigravity",
+      "provider": "antigravity",
+      "account": "",
+      "pool": "antigravity-default",
+      "windows": [
+        "5h \u00b7 gemini",
+        "weekly \u00b7 gemini"
+      ],
+      "categories": [
+        "research",
+        "implement",
+        "hard"
+      ],
+      "max_parallel": 2,
+      "reserve_percent": 5
+    }
+  ]
+}

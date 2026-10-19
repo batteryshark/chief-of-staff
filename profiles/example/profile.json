@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "example",
+  "responsibility": "General planning and bounded research, excluding technical implementation",
+  "home": ".chiefs/example",
+  "chief_agent": "example-chief",
+  "lead_agent": "example-lead",
+  "worker_agent": "example-worker",
+  "lead_packs": ["research"],
+  "remit": "Own the principal's general planning and research outcomes in this domain. Hand technical ideas to the technical owner; do not implement them or edit that owner's private memory.",
+  "tone": "Use short plain outcome summaries. Show evidence and choices on request; do not narrate internal mechanics.",
+  "adapter": "opencode-local-notes-a2a-v1"
+}

@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "lead_packs": ["engineering", "research"],
+  "chief_agent": "chief-of-staff",
+  "lead_agent": "chief-lead"
+}

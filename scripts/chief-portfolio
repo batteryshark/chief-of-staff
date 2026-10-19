@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+{{MARKER}}
+"""One compact view of every project the chief of staff tracks.
+
+Reads the LEAD.md paths listed in the brief, and prints for each project its lead's liveness, how
+fresh its log is, the first lines of its Status, and what it says is waiting on the principal. Then
+it prints the chief's own open items. The output is short on purpose: about four lines per project,
+so a catch-up across twenty projects stays cheap.
+
+    chief-portfolio            compact view
+    chief-portfolio --full     whole Status and Waiting sections
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HOME = Path(os.environ.get('CHIEF_BRIEF_DIR', '{{BRIEF_DIR}}')).expanduser()
+WIDTH = 170
+
+
+def section(text, name):
+    m = re.search(r'^## ' + re.escape(name) + r'[^\n]*\n(.*?)(?=^## |\Z)', text, re.M | re.S)
+    if not m:
+        return []
+    lines = [l.rstrip() for l in m.group(1).splitlines()]
+    return [l for l in lines if l.strip() and not l.lstrip().startswith('(')]
+
+
+def entries(lines):
+    """Join wrapped bullet lines into one entry each."""
+    out = []
+    for l in lines:
+        if l.lstrip().startswith(('- ', '* ', '| ')) or not out:
+            out.append(l.strip().lstrip('-* ').strip())
+        else:
+            out[-1] += ' ' + l.strip()
+    return [e for e in out if e and not set(e) <= set('|-: ')]
+
+
+def short(s, width=WIDTH):
+    s = re.sub(r'\s+', ' ', s)
+    return s if len(s) <= width else s[:width - 1] + '…'
+
+
+def ago(seconds):
+    m = int(seconds // 60)
+    return f'{m}m ago' if m < 60 else f'{m // 60}h ago' if m < 2880 else f'{m // 1440}d ago'
+
+
+def statuses():
+    tool = shutil.which('chief-openchamber') or str(Path.home() / '.local/bin/chief-openchamber')
+    try:
+        out = subprocess.run([tool, 'session', 'list', '--limit', '300', '--with-status', '--json'],
+                             capture_output=True, text=True, timeout=30, cwd='/tmp')
+        return {s['id']: (s.get('status') or {}).get('type', '?') for s in json.loads(out.stdout).get('sessions', [])}
+    except Exception:
+        return {}
+
+
+def main():
+    full = '--full' in sys.argv
+    brief = (HOME / 'brief.md').read_text() if (HOME / 'brief.md').exists() else ''
+    paths = list(dict.fromkeys(re.findall(r'(/[^\s`|)]+/LEAD\.md)', brief)))
+    live = statuses()
+    now = time.time()
+    for p in paths:
+        path = Path(p)
+        if not path.exists():
+            print(f'?  {p}: log missing\n')
+            continue
+        text = path.read_text()
+        title = re.search(r'^# (.+?)(?::\s*lead log)?\s*$', text, re.M)
+        name = title.group(1) if title else path.parent.name
+        sid = re.search(r'Lead session (ses_\w+)', text)
+        state = 'no lead' if not sid else f"lead {live.get(sid.group(1), 'unknown')}"
+        print(f'{name} · {state} · log updated {ago(now - path.stat().st_mtime)}')
+        status = entries(section(text, 'Status'))
+        waiting = entries(section(text, 'Waiting on the principal'))
+        for line in (status if full else status[:2]):
+            print('  ' + (line if full else short(line)))
+        if waiting:
+            print(f'  waiting on the principal: {len(waiting)}')
+            for line in (waiting if full else waiting[:3]):
+                print('   - ' + (line if full else short(line, WIDTH - 5)))
+        print()
+    open_md = HOME / 'open.md'
+    if open_md.exists():
+        text = open_md.read_text()
+        q = entries(section(text, 'Waiting on the principal'))
+        pr = entries(section(text, 'Promised by the chief'))
+        print(f'Chief open items: {len(q)} questions, {len(pr)} promises (open.md)')
+        for line in q + pr:
+            print('  - ' + (line if full else short(line, WIDTH - 4)))
+    chief = HOME / 'chief.json'
+    if chief.exists():
+        sid = json.loads(chief.read_text()).get('session')
+        if sid:
+            print(f'Chief session {sid} · {live.get(sid, "unknown")}')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

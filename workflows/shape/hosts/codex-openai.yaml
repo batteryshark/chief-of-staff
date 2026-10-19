@@ -1,0 +1,4 @@
+{{MARKER}}
+interface:
+  display_name: "Shape"
+  short_description: "Shape a project's strategy into PROJECT.md before building"

@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "agent": "study-lead",
+  "packs": ["research"],
+  "owner": {"mode": "principal", "style": "Short plain outcome summaries; details on request."}
+}

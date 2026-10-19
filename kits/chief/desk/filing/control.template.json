@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "mode": "DISABLED",
+  "chief_home": "/fictional/research-chief",
+  "chief_pointer": "/fictional/research-chief/filing-chief-route.json",
+  "open_source": "/fictional/research-chief/open.md",
+  "chief": {"session_id": "fictional-chief", "directory": "/fictional/research-chief"},
+  "receiver_id": "fictional-actual-receiver",
+  "projects": {
+    "/fictional/study": {"title": "Study", "lead_session": "fictional-study-lead", "enabled": false}
+  }
+}

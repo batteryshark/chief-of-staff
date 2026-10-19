@@ -1,0 +1,4 @@
+{{MARKER}}
+interface:
+  display_name: "Checkpoint"
+  short_description: "Bring the memory files up to date, optionally hand over to a fresh session"

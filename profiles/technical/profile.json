@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "lead_packs": ["engineering"],
+  "chief_agent": "chief-of-staff",
+  "lead_agent": "lead",
+  "owner": {"mode": "agent", "pointer": "{{BRIEF_DIR}}/chief.json", "label": "chief"}
+}

@@ -1,0 +1,10 @@
+import {build} from 'esbuild';
+import {mkdir,cp,rm,writeFile,readFile} from 'node:fs/promises';
+await mkdir('dist',{recursive:true});
+await build({entryPoints:['routing/plugin.js'],outfile:'dist/index.js',bundle:true,platform:'node',format:'esm',target:'node22'});
+await rm('dist/runway',{recursive:true,force:true});
+await cp('runway','dist/runway',{recursive:true,filter:p=>!p.includes('__pycache__')});
+await cp('runway_main.py','dist/runway_main.py');
+await cp('routing/WORKFLOW.md','dist/WORKFLOW.md');
+await writeFile('dist/package.json',JSON.stringify({name:'chief-runway-opencode',version:'0.1.0',type:'module',main:'index.js'},null,2));
+await writeFile('dist/THIRD_PARTY_NOTICES.md','Zod (MIT)\n\n'+await readFile('node_modules/zod/LICENSE','utf8'));

@@ -1,0 +1,7 @@
+{
+  "name": "chief-desk-private-native-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {".": "./hosts/desk-native/fixture-entry.mjs"}
+}
