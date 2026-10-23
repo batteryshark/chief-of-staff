@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "repository": "https://github.com/batteryshark/opencode-claude.git",
+  "branch": "chief-system-prompt",
+  "commit": "b98b0d64002ef2da94ee3b9e35b6745afad582b0",
+  "tree": "d76d94997706e83a1e4fa5955c0be569d40db569",
+  "bun_lock_sha256": "81f6577bae2a3ad0b8cd58ccc38c74755ba52371e3ebd71bb36144cb21840e3c",
+  "sdk": "0.3.224",
+  "upstream": {
+    "repository": "https://github.com/openchamber/opencode-claude.git",
+    "github": "openchamber/opencode-claude",
+    "npm": "@openchamber/opencode-claude",
+    "release": "1.5.0",
+    "tag": "v1.5.0",
+    "base": "8692d3efc81e486b204d3a27e3d0538df9d7b5c5"
+  },
+  "options": {"routing": "overlay", "systemPrompt": {"agent": "chief-of-staff", "source": "agent"}}
+}

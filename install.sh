@@ -5,6 +5,8 @@
 #   ./install.sh                     install or update every host
 #   ./install.sh opencode claude     only these hosts (opencode, claude, codex, bin, home)
 #   ./install.sh --routing opencode install the built quota tool and OpenCode agent
+#   ./install.sh --chief-bridge-check finite release check/candidate replay only
+#   ./install.sh --chief-bridge ACTION [args] prepare/plan/activate/rollback; see docs/chief-bridge.md
 #   ./install.sh --uninstall [hosts] remove the files this script installed
 #   ./install.sh --dry-run [hosts]   show what would change
 #   ./install.sh --role-fixture ROOT [--location PATH] stage repair-owned role fixture only
@@ -36,6 +38,14 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ${1:-} == --chief-bridge ]]; then
+  shift
+  exec python3 "$SRC/scripts/chief-bridge.py" "$@"
+fi
+if [[ ${1:-} == --chief-bridge-check ]]; then
+  shift
+  exec python3 "$SRC/scripts/chief-bridge.py" check "$@"
+fi
 if [[ ${1:-} == --chief-body-only ]]; then
   shift
   exec python3 "$SRC/scripts/install-chief-permissions.py" "${CHIEF_BRIEF_DIR:-$HOME/.chief-of-staff}" "$HOME" --body-only "$@"
@@ -131,6 +141,12 @@ fi
 if [[ -n $lead_config ]]; then
   [[ $routing == false ]] || { echo 'standalone lead does not install routing' >&2; exit 2; }
   exec python3 "$SRC/scripts/install-lead.py" "$lead_config" "$mode" "${hosts[@]}"
+fi
+
+# Finite technical/OpenCode maintenance, never activation. Other profiles and
+# dry/print/uninstall paths do not fetch, build or prepare candidates.
+if [[ $mode == install && " ${hosts[*]} " == *" opencode "* ]]; then
+  python3 "$SRC/scripts/chief-bridge.py" check
 fi
 
 # Render the same canonical guide paths that the resource installer owns.

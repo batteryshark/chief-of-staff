@@ -20,6 +20,21 @@
       "priority": 1
     },
     {
+      "id": "gpt-mid",
+      "host": "local",
+      "model": "openai/gpt-6.1-sol",
+      "variant": "medium",
+      "source": "codex",
+      "provider": "codex",
+      "account": "",
+      "pool": "codex-default",
+      "windows": "all",
+      "categories": ["implement"],
+      "max_parallel": 2,
+      "reserve_percent": 5,
+      "priority": 1
+    },
+    {
       "id": "gpt-strong",
       "host": "local",
       "model": "openai/gpt-6.1-sol",
