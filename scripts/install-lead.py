@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 
-from render import expand, lead_prompt, load_lead_config, read
+from render import expand, lead_prompt, load_lead_config, read, STRATEGIC_SKILLS, strategic_skill
 from install_paths import DestinationRoot
 from courtesy import skill, target as skill_target, MARKER
 from courtesy_owned import OwnedSkills
@@ -41,6 +41,17 @@ def main(config_path, mode, hosts):
             raise ValueError('unsupported standalone host')
         if host in ('opencode', 'claude', 'codex'):
             outputs.append((skill_target(home, host), skill().replace(MARKER, f'<!-- {marker}; upstream-courtesy -->')))
+            base = home / ('.config/opencode/skills' if host == 'opencode' else f'.{host}/skills')
+            for skill_name in STRATEGIC_SKILLS:
+                target = base / skill_name / 'SKILL.md'
+                text = strategic_skill(skill_name)
+                # Reuse an exact default-host copy without claiming or removing it.
+                destination.validate_all([target])
+                if target.is_file() and not target.is_symlink() and target.read_text().strip() == text.strip():
+                    continue
+                outputs.append((target, text.replace(
+                    '<!-- managed by chief-of-staff/install.sh; edit the source there and re-run it -->',
+                    f'<!-- {marker} -->')))
     # No chief seeds or helper executables. Preflight all outputs before writing.
     destination.validate_all(target for target, _ in outputs)
     courtesy_outputs = {p: t for p, t in outputs if p.name == 'SKILL.md' and p.parent.name == 'upstream-courtesy'}

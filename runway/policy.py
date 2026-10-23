@@ -34,6 +34,9 @@ def validate(config):
                 raise ValueError(f'route requires {key}')
         if r['host'] != 'local':
             raise ValueError('this dispatcher supports the local host; remote accounts require a separate verified registry')
+        blocked = r.get('unavailable_transports', [])
+        if not isinstance(blocked, list) or any(t != 'openchamber' for t in blocked):
+            raise ValueError('unavailable_transports supports only openchamber')
         if r['id'] in seen:
             raise ValueError('duplicate route id')
         seen.add(r['id'])
@@ -112,10 +115,36 @@ def preference_active(preference, scope, source, windows, now):
                instant(w.get('resets_at')) == instant(preference['reset_at']) for w in windows)
 
 
-def decide(config, snapshot, catalog, task, attempts, preference, now, burning=()):
+def held_percent(attempts, pool, window):
+    """Admission headroom, not billing; clamp estimates to observed remaining.
+
+    Idle uncertainty may release quota without releasing source/action ownership.
+    """
+    total = 0
+    for a in attempts:
+        if a['pool'] != pool or a['state'] not in ('admitted', 'running', 'uncertain'):
+            continue
+        if a['state'] == 'uncertain' and a.get('usage_released') is True:
+            continue
+        for charge in a['reservation']:
+            if charge['window_id'] == window['id'] and instant(charge['reset_at']) == instant(window.get('resets_at')):
+                total += charge['percent']
+    return min(window['remaining_percent'], max(0, total))
+
+
+def validate_exclusions(config, exclude_routes):
+    if not isinstance(exclude_routes, list) or any(not isinstance(r, str) for r in exclude_routes):
+        raise ValueError('exclude_routes must be a list of configured route ids')
+    if set(exclude_routes) - {r['id'] for r in config['routes']}:
+        raise ValueError('exclude_routes contains an unknown route id')
+
+
+def decide(config, snapshot, catalog, task, attempts, preference, now, burning=(), *, exclude_routes=None, cooldowns=()):
     """burning: source ids whose allowance would go unspent at its reset (see usage.assess).
     They are preferred automatically, after an explicit use-before-reset request."""
     validate(config)
+    exclude_routes = [] if exclude_routes is None else exclude_routes
+    validate_exclusions(config, exclude_routes)
     if task.get('category') not in CATEGORIES or task.get('size') not in SIZES:
         raise ValueError('task requires category and size (small, medium, large)')
     if not task.get('scope') or not task.get('directory') or not task.get('job'):
@@ -131,6 +160,16 @@ def decide(config, snapshot, catalog, task, attempts, preference, now, burning=(
     candidates, rejected = [], []
     for r in config.get('routes', []):
         try:
+            # Current Ledger.plan emits only OpenChamber create/send actions.
+            if 'openchamber' in r.get('unavailable_transports', []):
+                raise ValueError('OpenChamber transport unavailable: selectable alias validation repair required')
+            if r['id'] in exclude_routes:
+                raise ValueError('excluded by this request')
+            cooling = [c for c in cooldowns if (c['host'], c['pool'], c['model']) ==
+                       (r['host'], r['pool'], r['model']) and instant(c['until']) > now]
+            if cooling:
+                c = max(cooling, key=lambda c: instant(c['until']))
+                raise ValueError(f"model cooldown until {c['until']}: {c['reason']} ({c['reset_basis']})")
             if task['category'] not in r['categories']:
                 raise ValueError('below the configured task capability requirement')
             m = models.get(r['model'])
@@ -154,18 +193,7 @@ def decide(config, snapshot, catalog, task, attempts, preference, now, burning=(
             estimate = SIZES[task['size']]
             for w in windows:
                 reset = instant(w.get('resets_at'))
-                reserved = 0
-                for a in attempts:
-                    if a['pool'] != r['pool'] or a['state'] == 'unsent':
-                        continue
-                    # Completed usage stays reserved until a later measurement includes it.
-                    if a['state'] not in ('admitted', 'running', 'uncertain') and \
-                            instant(a.get('finished_at')) is not None and \
-                            instant(latest['observed_at']) >= instant(a['finished_at']):
-                        continue
-                    for charge in a['reservation']:
-                        if charge['window_id'] == w['id'] and instant(charge['reset_at']) == reset:
-                            reserved += charge['percent']
+                reserved = held_percent(attempts, r['pool'], w)
                 floor = 0 if preferred and w['id'] == preference['window_id'] else r.get('reserve_percent', 5)
                 available = w['remaining_percent'] - reserved - floor
                 if w['remaining_percent'] <= 0 or available < estimate:
@@ -175,6 +203,7 @@ def decide(config, snapshot, catalog, task, attempts, preference, now, burning=(
                 reservation.append({'window_id': w['id'], 'reset_at': w.get('resets_at'), 'percent': estimate})
             candidates.append({'route': r['id'], 'model': r['model'], 'variant': r.get('variant'),
                 'agent': r.get('agent'), 'host': r['host'], 'pool': r['pool'], 'source_id': source['id'],
+                'provider': r['provider'], 'account': r['account'],
                 'observed_at': latest['observed_at'], 'reservation': reservation,
                 'score': min(headroom), 'priority': r.get('priority', 0), 'preferred': preferred,
                 'burning': source['id'] in burning,

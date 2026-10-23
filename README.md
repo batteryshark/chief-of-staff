@@ -24,9 +24,10 @@ The principal sets authority and approves plans before implementation. Chief coo
 - Engineering and research lead practices, plus an on-demand upstream-courtesy skill that requires approval before posting.
 - Optional scoped OpenCode profiles and quota-aware Runway routing.
 
-This hygiene-only update removes retired desk implementation/tests. It does not
-include the parallel private-source runtime repairs or claim live enrollment.
-See [publication boundaries](docs/publication/README.md).
+This preparation includes the repaired lean roles/installers, heartbeat continuation
+boundaries and origin-bound Runway dispatch source. Source/public candidate checks
+are separate from installed routing readback and final native acceptance. Nothing
+here claims live enrollment or authorizes publication. See [publication boundaries](docs/publication/README.md).
 
 The separate [lead-kit](https://github.com/batteryshark/lead-kit) is for one accountable project lead without a Chief. This repository includes the current lead core in `kits/lead/` and can also render a standalone lead. Chief adds cross-project coordination, principal-facing conversation, memory and shaping.
 
@@ -127,7 +128,20 @@ PYTHONPATH=scripts:tests python3 -B -m unittest \
   test_modular.ModularTests.test_principal_standalone_install_all_hosts_without_chief
 ```
 
-These use synthetic data and fixture destinations, including a fake-HOME install/uninstall. `npm test` selects the bounded release suite, including additional filing-policy and configuration checks. `npm run test:development` retains the wider suite, including optional dependency tests and historical parity fixtures requiring commits from the development repository. Native runtime/goal-mode acceptance must be checked on your configured host separately.
+These use synthetic data and fixture destinations, including a fake-HOME install/uninstall.
+`npm test` selects the bounded release suite. The full regression suite also checks
+the real a2a descriptor/capture contract using an explicitly selected external source,
+not a private sibling checkout, vendored transport or a live plugin setup:
+
+```sh
+# Separately configured opencode-a2a source; this loads descriptor definitions only.
+export CHIEF_A2A_TEST_MODULE=/absolute/opencode-a2a/src/plugin.js
+npm run test:development
+node --test heartbeat/*.test.mjs
+```
+
+No private Git history, enrollment receipts or operational archives are needed.
+Native runtime/goal-mode acceptance must be checked on your configured host separately.
 
 ## License
 

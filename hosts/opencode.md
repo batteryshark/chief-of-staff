@@ -9,6 +9,51 @@ permissions:
   - action: edit
     resource: "{{BRIEF_DIR}}/*"
     effect: allow
+  - action: edit
+    resource: "brief.md"
+    effect: allow
+  - action: edit
+    resource: "open.md"
+    effect: allow
+  - action: edit
+    resource: "principal.md"
+    effect: allow
+  - action: edit
+    resource: "ideas.md"
+    effect: allow
+  - action: edit
+    resource: "models.md"
+    effect: allow
+  - action: edit
+    resource: "chief.json"
+    effect: allow
+  - action: edit
+    resource: "inbox/*"
+    effect: allow
+  - action: edit
+    resource: "archive/*"
+    effect: allow
+  - action: edit
+    resource: "previews/*"
+    effect: allow
+  - action: edit
+    resource: "research/*"
+    effect: allow
+  - action: edit
+    resource: "heartbeat/*"
+    effect: allow
+  - action: edit
+    resource: "images/*"
+    effect: allow
+  - action: edit
+    resource: "nod-continuations/*"
+    effect: allow
+  - action: edit
+    resource: "runway/*"
+    effect: allow
+  - action: edit
+    resource: "????-??-??-*"
+    effect: allow
   - action: external_directory
     resource: "{{BRIEF_DIR}}/*"
     effect: allow
@@ -65,8 +110,12 @@ The user pins this conversation. Get your own session id once with `echo $OPENCO
 **One-off workers** (work that belongs to no project). Use `runway` prepare before the `openchamber`
 dispatch, following the routing workflow. Use its returned `action` and `args`, adding a full worker
 `prompt`: `session.create` with an explicit `model` and `variant`, a `title` that names the task in
-a few plain words (no prefix; replace the job id `runway` puts there), and `returnResult: true`. Bind the returned session with `runway` and finish the attempt when it
-lands. End the worker's brief with the worker-question instruction: "If you need a decision or
+a few plain words (no prefix; replace the job id `runway` puts there). Set `returnResult: true`
+ONLY if you need the answer to continue. Otherwise explicitly override the returned args with
+`returnResult: false`; brief the worker to write its full result to `{{BRIEF_DIR}}/inbox/` with
+job/attempt and Worker session, no completion FYI. Bind the returned session with `runway`.
+For deferred results, at the next catch-up check native idle state/results before finishing the
+attempt; an inbox file is not ledger completion. End the worker's brief with the worker-question instruction: "If you need a decision or
 information, don't guess and don't use the built-in question prompt. Send your question to session
 <your id> with the openchamber tool (session.send, returnResult true), then continue with the
 answer that comes back. If the answer says PENDING, end your turn; the answer will arrive later as
@@ -91,6 +140,6 @@ Use the `chief-openchamber` command from the shell instead; it has the same sess
 telling it to read its state files, update `chief.json` with its id, and say hello. Leave this old
 session for the principal to archive.
 
-**Visual channel.** Use the fenced detail block. For longer material, write the file in the brief
-directory and call `openchamber` with `file.open` and its absolute path so it opens in the user's
-file panel. Open a file only when seeing it helps the conversation.
+**Visual channel.** Use the fenced detail block. For longer material, follow the preview-location
+rule above: copy to `{{BRIEF_DIR}}/previews/<name>/` before `openchamber` → `file.open`,
+or use inline `openchamber_render` → `render.page`. Open a file only when seeing it helps the conversation.

@@ -163,18 +163,16 @@ class CourtesySafetyTests(fixtures.CourtesyTests):
         self.install('--uninstall', *args, ok=False)
         self.assertEqual(before, self.snapshot())
 
-    def test_exact_6fc58e9_all22_output_parity(self):
-        from hygiene_fixtures import outputs, pinned_print
-        oldroot = self.root / '6fc58e9'
-        old = outputs(pinned_print('6fc58e9', oldroot, self.env), oldroot, self.home)
+    def test_current_explicit_exports_preserve_on_demand_courtesy(self):
+        from hygiene_fixtures import outputs
+        from effective_roles import assert_current_exports
         new = outputs(self.install('--print'), fixtures.SRC, self.home)
-        self.assertEqual(len(new), 22)
-        self.assertEqual(new, old)
+        assert_current_exports(self, new, fixtures.SRC, self.home, self.home / '.chief-of-staff')
         for path, text in new.items():
             if '/upstream-courtesy/SKILL.md' in path:
                 self.assertEqual(text, skill() + '\n')
-            else:
-                self.assertNotIn('upstream-courtesy', text)
+            elif '/agents/' in path or path.endswith('.toml'):
+                self.assertNotIn('## 1. Triage before drafting', text)
 
     def test_helper_partial_failure_rolls_back_exact_creations_only(self):
         owned = self.owned()
@@ -246,21 +244,18 @@ class CourtesySafetyTests(fixtures.CourtesyTests):
         self.owned(rollback=True).rollback(run)
         self.assertEqual(before, self.snapshot())
 
-    def test_exact_7f780dd_old19_only_approved_canonical_skill_delta(self):
-        from hygiene_fixtures import outputs, pinned_print
-        oldroot = self.root / '7f780dd'
-        old = outputs(pinned_print('7f780dd', oldroot, self.env), oldroot, self.home)
+    def test_current_approved_license_delta_keeps_exact_skill_and_outreach_guards(self):
+        from hygiene_fixtures import outputs
+        from effective_roles import assert_current_exports
         new = outputs(self.install('--print'), fixtures.SRC, self.home)
+        assert_current_exports(self, new, fixtures.SRC, self.home, self.home / '.chief-of-staff')
         for h in ('opencode', 'claude', 'codex'):
             p = str(target(Path('<HOME>'), h))
-            oldtext = old.pop(p)
-            self.assertEqual(digest(oldtext[:-1].encode()), '145dff55d7417117b02aa43abc693855a17901bc7100b8024ae131ca02dae837')
-            from courtesy_fixtures import approved_n1
-            self.assertEqual(approved_n1(oldtext), skill() + '\n')
-            self.assertEqual(new.pop(p), skill() + '\n')
-        self.assertEqual(len(new), 19)
-        self.assertEqual(new, old)
-        self.assertFalse(any('upstream-courtesy' in text for text in new.values()))
+            self.assertEqual(new[p], skill() + '\n')
+        for phrase in ('missing upstream LICENSE alone is no reason to block',
+                       'not to relicense copied third-party code', 'never strip or invent licence text',
+                       'If AI assistance is refused, STOP', 'Changed/unlisted actions need a fresh yes'):
+            self.assertIn(phrase, ' '.join(skill().split()))
 
     def test_n1_finite_approval_and_policy_cases(self):
         text = skill()

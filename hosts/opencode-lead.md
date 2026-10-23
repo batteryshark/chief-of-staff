@@ -7,6 +7,9 @@ permissions:
     resource: "*"
     effect: deny
   - action: edit
+    resource: "PROJECT.md"
+    effect: allow
+  - action: edit
     resource: "LEAD.md"
     effect: allow
   - action: edit
@@ -18,13 +21,25 @@ permissions:
   - action: edit
     resource: "*/lead/*"
     effect: allow
+  - action: edit
+    resource: "{{BRIEF_DIR}}/inbox/*.md"
+    effect: allow
   - action: external_directory
-    resource: "{{BRIEF_DIR}}/*"
+    resource: "{{BRIEF_DIR}}/chief.json"
+    effect: allow
+  - action: external_directory
+    resource: "{{BRIEF_DIR}}/models.md"
+    effect: allow
+  - action: external_directory
+    resource: "{{BRIEF_DIR}}/inbox/*"
     effect: allow
   - action: external_directory
     resource: "{{RUNWAY_WORKFLOW}}"
     effect: allow
 {{RESOURCE_PERMISSIONS}}
+  - action: external_directory
+    resource: "{{HOME_INFRA}}"
+    effect: allow
   - action: shell
     resource: "rm *"
     effect: ask
@@ -83,14 +98,10 @@ Thinking variants are usually `medium`, `high`, and for some models `xhigh` or `
 
 {{HOST_ESCALATIONS}}
 
-**Project knowledge.** Keep a short view of the project in OpenChamber's Project knowledge, where
-the principal can glance at it in the app: one plan titled `# <Project>: where it stands` (the goal
-in a paragraph, what they can see or use now, what's next, what's waiting on them; under about 40
-lines) and one todo per item waiting on the principal, worded as an outcome. Use the `openchamber`
-tool's `knowledge.list`, `knowledge.save` (replace by `id`, never add a second plan) and
-`knowledge.delete`. Update them when a milestone lands, when you escalate, and when an answer comes
-back (complete or delete that todo); not every turn. Never pin them: pinned items go into every
-session's context in this project. `LEAD.md` stays the record; this view only mirrors it.
+**Project knowledge.** Use `openchamber_knowledge` to list before saving the single status Note
+described above. Replace by ID with the expected old body; preserve unrelated items. Keep the
+initial approved coarse Plan ticked and genuine principal-wait Todos current, not a second
+status Plan. Never pin these items into every session's context.
 
 **Native subagents** (the `subagent` tool, for example `explore`) only for a quick lookup you need
 before deciding something. They run on your own model.

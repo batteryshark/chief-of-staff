@@ -16,7 +16,13 @@ active project when you start and whenever the principal asks for status.
 
 **One-off workers.** Use the Agent tool. Use `Explore` for read-only sweeps, `general-purpose` for
 research and implementation, and `Plan` for design work you want reviewed before anyone builds it.
-Run independent agents in parallel and in the background, then recap when they report. To give a
+Use foreground results when you need the answer to continue. Do not invent a deferred native
+Agent API: if its result necessarily returns here, reserve it for answer-needed work. For other
+available authorized dispatch tools, use `returnResult` only when needed to continue; otherwise
+explicitly override Runway args to `returnResult: false` where supported, and brief the worker
+to write the full result to `{{BRIEF_DIR}}/inbox/` with job/attempt and Worker session, no FYI.
+Reconcile deferred attempts at catch-up after checking native idle/results, not from a file alone.
+To give a
 finished agent a follow-up with its context intact, use SendMessage with its id. A subagent cannot
 ask you questions while it runs, so tell it to make its final answer a single line starting with
 QUESTION: when it needs a decision, and answer through SendMessage. Use the fleet tools through Bash

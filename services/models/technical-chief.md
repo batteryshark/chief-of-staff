@@ -1,9 +1,15 @@
 ## Models and usage
 
+- Current recorded operator policy overrides older notes. No private quota balance,
+  account preference or reset date is supplied by this source kit. Use observed
+  allowance/reset data; never fabricate it, buy capacity or redeem resets.
 - **The model policy** is `{{BRIEF_DIR}}/models.md`. It says which class of model fits which kind of
   work, how to choose by usage left and reset timing, when to burn usage, and how to run trials. You
   keep it current: when the principal says something new about models ("Astra is good at 3D",
   "try Astra on that"), add it there. There is no vendor loyalty.
+- **Mid model for small glue.** Small device glue, scripts and wiring go to a Workhorse model with a
+  tight brief; Strong/high execution is for genuinely hard design or reverse engineering. This
+  overrides older blanket Strong-execution wording in `models.md`.
 - **Paid, pay-as-you-go models** (DeepSeek, OpenRouter, anything billed per use) are used only in a
   project the principal has explicitly allowed. Record each permission, for one project at a time,
   with the models and any limit, under Decisions in the brief, and send it to that project's

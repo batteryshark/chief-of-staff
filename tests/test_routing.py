@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-from runway.policy import decide, timestamp
+from runway.policy import decide, timestamp, held_percent
 from runway.ledger import Ledger
 from runway.cli import handle, LocalAPI
 
@@ -115,12 +115,29 @@ class PolicyTests(unittest.TestCase):
         self.snapshot['sources'][1]['latest']['windows'].append({'id':'new','unit':'percent','remaining_percent':0})
         self.assertEqual(self.run_policy()['selected']['route'],'gpt')
 
-    def test_completed_charge_persists_until_measurement_catches_up(self):
+    def test_completed_and_quiescent_release_without_new_telemetry(self):
         a={'pool':'claude','state':'completed','finished_at':timestamp(NOW),
            'reservation':[{'window_id':'weekly','reset_at':timestamp(NOW+86400),'percent':75}]}
-        self.assertEqual(self.run_policy([a])['selected']['route'],'gpt')
+        self.assertEqual(self.run_policy([a])['selected']['route'],'claude')
+        a['state'] = 'quiescent'
+        self.assertEqual(self.run_policy([a])['selected']['route'],'claude')
         self.snapshot['sources'][1]['latest']['observed_at']=timestamp(NOW)
         self.assertEqual(self.run_policy([a])['selected']['route'],'claude')
+
+    def test_running_holds_clamp_and_reset_identity(self):
+        w = self.snapshot['sources'][1]['latest']['windows'][1]
+        a = dict(pool='claude', state='running', reservation=[dict(
+            window_id=w['id'], reset_at=w['resets_at'], percent=3)])
+        self.assertEqual(held_percent([a], 'claude', w), 3)
+        a['reservation'][0]['percent'] = 999
+        self.assertEqual(held_percent([a], 'claude', w), 80)
+        self.assertEqual(self.run_policy([a])['selected']['route'], 'gpt')
+        w['remaining_percent'] = 19
+        self.assertEqual(held_percent([a], 'claude', w), 19)
+        w['resets_at'] = timestamp(NOW+99999)
+        self.assertEqual(held_percent([a], 'claude', w), 0)
+        w['resets_at'] = None
+        self.assertEqual(held_percent([a], 'claude', w), 0)
 
     def test_source_aliases_cannot_evade_pool_caps(self):
         r=copy.deepcopy(self.config['routes'][0]);r.update(id='alias',pool='alternate',source='source-id-alias')
@@ -145,7 +162,8 @@ class LedgerTests(unittest.TestCase):
 
     def evidence(self):
         return {'session_id':'ses_worker','idle':True,'inbox_empty':True,'outcome':'succeeded',
-                'tools_reconciled':True,'effects_reconciled':True,'last_idle_at':timestamp(NOW+2)}
+                'tools_reconciled':True,'effects_reconciled':True,'last_idle_at':timestamp(NOW+2),
+                'observed_at':timestamp(NOW+3)}
 
     def checkpoint(self):
         return dict(objective='fix',directory='/repo',changes='file.py',tests='pass',next='review',side_effects='none')
@@ -216,6 +234,79 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'terminal execution'):
             self.ledger.finish(a['id'],'completed',{},evidence,NOW+3)
 
+    def test_legacy_quiescent_can_finish_without_losing_checkpoint(self):
+        a = self.prepare()['attempt']; self.bind(a)
+        cp = self.checkpoint()
+        self.ledger.finish(a['id'], 'quiescent', cp, self.evidence(), NOW+3)
+        out = self.ledger.finish(a['id'], 'completed', {}, self.evidence(), NOW+4)
+        self.assertEqual(out['state'], 'completed')
+        self.assertEqual(out['checkpoint'], cp)
+
+    def test_uncertain_idle_releases_only_quota_not_ownership(self):
+        a = self.prepare()['attempt']; self.bind(a)
+        e = self.evidence(); e.update(outcome='unknown', effects_reconciled=False)
+        with self.assertRaises(ValueError):
+            self.ledger.finish(a['id'], 'completed', {}, e, NOW+3)
+        out = self.ledger.finish(a['id'], 'uncertain', {}, e, NOW+3)
+        self.assertEqual(out['state'], 'uncertain')
+        self.assertTrue(out['usage_released'])
+        self.assertEqual(held_percent([out], out['pool'], self.snapshot['sources'][1]['latest']['windows'][0]), 0)
+        self.assertFalse(self.prepare(now=NOW+4)['dispatch_allowed'])
+        e['last_idle_at'] = timestamp(NOW-100)
+        self.assertTrue(self.ledger.finish(a['id'], 'uncertain', {}, e, NOW+4)['usage_released'])
+        for key in ('idle', 'inbox_empty'):
+            e[key] = False
+            out = self.ledger.finish(a['id'], 'uncertain', {}, e, NOW+4)
+            self.assertTrue(out['usage_released'])
+            e[key] = True
+
+    def test_released_uncertain_recheck_outage_keeps_zero_until_bind(self):
+        from unittest.mock import Mock
+        a = self.prepare()['attempt']; self.bind(a)
+        host = Mock()
+        host.idle_evidence.side_effect = OSError('native unavailable')
+        req = dict(action='finish', attempt=a['id'], state='uncertain', format='json')
+        # A never-verified uncertain attempt (like Drama) still holds its quota.
+        out = handle(req, self.config, self.ledger, None, host)
+        window = self.snapshot['sources'][1]['latest']['windows'][0]
+        self.assertFalse(out['usage_released'])
+        self.assertEqual(held_percent([out], out['pool'], window), 3)
+        self.ledger.finish(a['id'], 'uncertain', {}, self.evidence(), NOW+3)
+        out = handle(req, self.config, self.ledger, None, host)
+        self.assertTrue(out['usage_released'])
+        self.assertEqual(held_percent([out], out['pool'], window), 0)
+        self.assertEqual(out['state'], 'uncertain')
+        self.assertIn('unavailable', out['evidence']['native_check'])
+        self.assertFalse(self.prepare(now=NOW+4)['dispatch_allowed'])
+        rebound = self.bind(out)
+        self.assertNotIn('usage_released', rebound)
+        self.assertEqual(held_percent([rebound], rebound['pool'], window), 3)
+
+    def test_legacy_quiescent_to_uncertain_outage_keeps_zero_and_checkpoint(self):
+        from unittest.mock import Mock
+        a = self.prepare()['attempt']; self.bind(a)
+        cp = self.checkpoint()
+        self.ledger.finish(a['id'], 'quiescent', cp, self.evidence(), NOW+3)
+        self.assertNotIn('usage_released', self.ledger.get(a['id']))
+        host = Mock()
+        host.idle_evidence.side_effect = OSError('native unavailable')
+        out = handle(dict(action='finish', attempt=a['id'], state='uncertain', format='json'),
+                     self.config, self.ledger, None, host)
+        self.assertEqual(out['state'], 'uncertain')
+        self.assertEqual(out['checkpoint'], cp)
+        self.assertTrue(out['usage_released'])
+        window = self.snapshot['sources'][1]['latest']['windows'][0]
+        self.assertEqual(held_percent([out], out['pool'], window), 0)
+        self.assertFalse(self.prepare(now=NOW+4)['dispatch_allowed'])
+
+    def test_new_active_session_owner_protects_old_quiescent(self):
+        a = self.prepare()['attempt']; self.bind(a)
+        self.ledger.finish(a['id'], 'quiescent', self.checkpoint(), self.evidence(), NOW+3)
+        b = self.prepare(now=NOW+4)['attempt']
+        with self.assertRaisesRegex(ValueError, 'newer active'):
+            self.ledger.finish(a['id'], 'completed', {}, self.evidence(), NOW+5)
+        self.assertEqual(self.ledger.get(b['id'])['state'], 'admitted')
+
     def test_preference_survives_restart_but_expires(self):
         self.ledger.prefer(self.config,self.snapshot,'/project','gpt','5h',NOW)
         other=Ledger(self.path)
@@ -230,6 +321,30 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.prepare(task={**self.task,'directory':'/other'})
 
 class TransportTests(unittest.TestCase):
+    def test_native_idle_checks_active_inbox_permissions_and_forms(self):
+        api = LocalAPI('http://127.0.0.1:1234')
+        for blocked in range(4):
+            results = [{}, [], [], []]
+            results[blocked] = {'ses_worker': {}} if blocked == 0 else [{}]
+            with patch.object(api, 'session', return_value=dict(location=dict(directory='/repo'),
+                    time=dict(idle=(NOW+2)*1000), outcome='succeeded')), patch.object(api, 'get', side_effect=[{'data': r} for r in results]):
+                e = api.idle_evidence('ses_worker', '/repo')
+            self.assertFalse(e['idle'] and e['inbox_empty'])
+
+    def test_uncertain_finish_uses_native_not_caller_evidence(self):
+        from unittest.mock import Mock
+        ledger, host = Mock(), Mock()
+        ledger.get.return_value = dict(session_id='ses_worker', task=dict(directory='/repo'))
+        ledger.finish.return_value = dict(id='a', task={})
+        host.idle_evidence.return_value = dict(idle=False, inbox_empty=False)
+        handle(dict(action='finish', attempt='a', state='uncertain', idle=True), {}, ledger, None, host)
+        host.idle_evidence.assert_called_once_with('ses_worker', '/repo', quota_only=True)
+        self.assertFalse(ledger.finish.call_args.args[3]['idle'])
+        host.idle_evidence.side_effect = OSError('native unavailable')
+        handle(dict(action='finish', attempt='a', state='uncertain'), {}, ledger, None, host)
+        self.assertNotIn('idle', ledger.finish.call_args.args[3])
+        self.assertIn('unavailable', ledger.finish.call_args.args[3]['native_check'])
+
     def test_local_auth_never_sent_to_remote_or_userinfo_url(self):
         for url in ('https://example.com','http://evil/','http://user@localhost:1','http://localhost/path'):
             with self.assertRaises(ValueError):LocalAPI(url,auth=True)

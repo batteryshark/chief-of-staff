@@ -16,12 +16,18 @@ class ProfileTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
         self.home = self.root / 'home'
         self.home.mkdir()
         self.domain = self.home / '.chiefs/example'
         self.env = {**os.environ, 'HOME':str(self.home), 'CHIEF_BRIEF_DIR':str(self.home / '.chief-of-staff'),
-                    'PYTHONDONTWRITEBYTECODE':'1', 'NPM_CONFIG_OFFLINE':'true', 'NPM_CONFIG_UPDATE_NOTIFIER':'false'}
+                     'PYTHONDONTWRITEBYTECODE':'1', 'NPM_CONFIG_OFFLINE':'true', 'NPM_CONFIG_UPDATE_NOTIFIER':'false'}
+        # The public installer requires an explicit transport source. Hash this
+        # synthetic fixture only; never import or discover an installed plugin.
+        transport = self.root / 'transport/src/plugin.js'
+        transport.parent.mkdir(parents=True)
+        transport.write_text('// Synthetic transport fixture; never loaded.\nexport default {};\n')
+        self.env.update(CHIEF_A2A_MODULE=str(transport), CHIEF_A2A_ROOT=str(transport.parent.parent))
         self.profile = json.loads((SRC / 'profiles/example/profile.json').read_text())
 
     def run_install(self, *args, profile='example'):
@@ -94,7 +100,7 @@ class ProfileTests(unittest.TestCase):
     def test_reinstall_private_seeds_inventory_and_rollback(self):
         self.assertEqual(self.run_install().returncode,0)
         inventory=json.loads((self.domain/'.kit-install.json').read_text())
-        self.assertEqual(len(inventory['owned']),10)
+        self.assertEqual(len(inventory['owned']),17)  # ten original leaves + seven public read-only guides
         for name in ('brief.md','principal.md','open.md','chief.json'):
             (self.domain/name).write_text('private fixture '+name)
         self.assertEqual(self.run_install().returncode,0)

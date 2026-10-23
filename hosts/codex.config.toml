@@ -11,6 +11,11 @@ developer_instructions = '''
 close_agent when finished) for repository work, when this session has them. Use the fleet tools
 from the shell for other providers and for Claude Code or Antigravity. Codex subagents cannot ask
 you questions while they run, so use the QUESTION: form of the worker instruction.
+Use foreground native results only when you need the answer to continue; do not invent a
+deferred native API. For available authorized dispatch tools, `returnResult` is conditional:
+otherwise explicitly override Runway args to `returnResult: false` where supported, and brief
+the worker to write its full result to `{{BRIEF_DIR}}/inbox/` with job/attempt and Worker session,
+no completion FYI. At catch-up verify native idle/results before Runway finish, not a file alone.
 
 **Visual channel.** Use the fenced detail block. The voice tool reads only your final message and
 skips fenced blocks. For longer material, write the file in the brief directory and put its path

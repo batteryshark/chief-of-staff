@@ -57,16 +57,18 @@ def main(mode, capabilities):
         if (type(owned) is not dict or set(owned) != {'version', 'owner', 'owned'}
                 or type(owned['version']) is not int or owned['version'] != 1
                 or owned['owner'] != 'pi-preset' or type(owned['owned']) is not dict
-                or set(owned['owned']) != {str(p.relative_to(home)) for p in outputs}
+                or not set(owned['owned']) <= {str(p.relative_to(home)) for p in outputs}
+                or ({str(p.relative_to(home)) for p in outputs} - set(owned['owned'])) - {
+                    f'.pi/agent/skills/{name}/SKILL.md' for name in ('delivery-outlook', 'comparative-review')}
                 or any(type(v) is not str or not re.fullmatch('[0-9a-f]{64}', v)
                        for v in owned['owned'].values())):
             raise ValueError('invalid Pi ownership inventory')
     for p in outputs:
         if p.exists():
             key = str(p.relative_to(home))
-            if not owned or digest(p.read_bytes()) != owned['owned'][key]:
+            if not owned or key not in owned['owned'] or digest(p.read_bytes()) != owned['owned'][key]:
                 raise ValueError('unowned or modified Pi resource: ' + str(p))
-        elif owned:
+        elif owned and str(p.relative_to(home)) in owned['owned']:
             raise ValueError('missing owned Pi resource; reconcile inventory: ' + str(p))
     # Separate immutable courtesy receipts retain the existing inode/hash guards.
     courtesy = OwnedSkills(home, {courtesy_path: courtesy_text}, owner='pi-preset')
@@ -86,7 +88,8 @@ def main(mode, capabilities):
         courtesy.uninstall()
         if owned:
             for p in outputs:
-                p.unlink()
+                if str(p.relative_to(home)) in owned['owned']:
+                    p.unlink()
             inventory.unlink()
         return  # Never prune user directories or remove seeds/settings/packages.
     courtesy.install()

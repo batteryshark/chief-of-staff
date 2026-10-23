@@ -206,13 +206,16 @@ class PackagingTests(unittest.TestCase):
         memory = self.home / 'custom-memory'
         prompt = (self.home / '.config/opencode/agents/chief-of-staff.md').read_text()
         guides = self.assert_guides(memory, prompt)
+        # Frozen repair roles serialize permissions inline as JSON. Parse through
+        # the existing dual-format adapter; retain every original resource check.
+        from access_policy import agent_parts
+        rules = agent_parts(prompt)[2]
         for guide in guides:
-            self.assertIn(f'resource: "{guide}"\n    effect: allow', prompt)
-        self.assertIn(f'resource: "{memory}/.kit-resources/*"\n    effect: deny', prompt)
-        rules = re.findall(r'  - action: (\w+)\n    resource: ("[^\n]*")\n    effect: (\w+)',
-                           prompt.split('---')[1])
+            self.assertIn(dict(action='read', resource=str(guide), effect='allow'), rules)
+        self.assertIn(dict(action='edit', resource=f'{memory}/.kit-resources/*', effect='deny'), rules)
         def effect(action, path):
-            return [e for a, r, e in rules if a == action and fnmatch.fnmatchcase(str(path), json.loads(r))][-1]
+            return [r['effect'] for r in rules if r['action'] == action
+                    and fnmatch.fnmatchcase(str(path), r['resource'])][-1]
         for guide in guides:
             for p in (guide, guide.relative_to(memory)):
                 self.assertEqual(effect('read', p), 'allow')

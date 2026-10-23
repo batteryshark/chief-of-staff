@@ -1,5 +1,9 @@
 {
   "source_pin": "fad09c0538115957f5006fdd4afd3d62f8628c84",
+  "repair_source_pin": "73c0da8697da28e344d1b01c33244bcdadb90d16",
+  "repair_public_parent": "0fca891a279727c5d7ea2421a5719234c5a6a692",
+  "repair_selection": "Reviewed Git-blob deltas reconciled with public portability and read-only service guides; private history, enrollment, records and evidence excluded.",
+  "private_history_imported": false,
   "artwork_pin": "80cf40bb062d9ce2754e2e9441b7e4d3da53cf11",
   "layout": "Canonical Chief and Lead composition; Lead resources in kits/lead, shared resources in kits/shared.",
   "license": "MIT for owned source; AI-generated artwork under MIT to the extent applicable."

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Explicit optional desk module installer. No default host/profile changes."""
+"""RETIRED / UNUSED desk installer, retained for history; do not activate.
+Use lead-owned project status Notes and the ordinary install.sh instead.
+"""
 import argparse
 import hashlib
 import json
@@ -14,6 +16,7 @@ SRC = Path(__file__).resolve().parent.parent
 
 
 def install(root, home, mode, native_artifacts=False):
+    raise ValueError('Desk installation is retired; use install.sh and lead-owned status Notes.')
     destination = DestinationRoot(root)
     home = Path(home)
     desk = home / 'desk'

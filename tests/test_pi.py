@@ -22,7 +22,9 @@ class PiTests(unittest.TestCase):
         self.home = self.root / 'home'
         self.home.mkdir(mode=0o700)
         self.package = self.root / 'relocated'
-        shutil.copytree(SRC, self.package, ignore=shutil.ignore_patterns('.git', '__pycache__'))
+        # These offline export tests need kit sources, not an inherited 1.2 GB
+        # native-host checkout or npm dependencies copied for every test case.
+        shutil.copytree(SRC, self.package, ignore=shutil.ignore_patterns('.git', '__pycache__', 'host', 'node_modules'))
         self.env = {'PATH': os.environ['PATH'], 'HOME': str(self.home),
                     'TMPDIR': str(self.root), 'PYTHONDONTWRITEBYTECODE': '1',
                     **{f'XDG_{k}_HOME': str(self.root / k.lower())
@@ -187,17 +189,18 @@ class PiTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'no longer shipped'):
             pack_values(['life-admin'])
 
-    def test_original_host_render_bytes_unchanged(self):
-        # Derived independently from a95f4e81 output, normalizing only fixture
-        # source/HOME roots. No private historical Git object needed at test time.
-        expected = {
-            'opencode': '847581d5ef8251a503ecad5646972046638c99931b5af158989d04b3c00aeff4',
-            'claude': '0faadc20cf25782be69e16c23f3695fa9b63ee880bdb6983e3476c637718d2ca',
-            'codex': 'a0e8bb7883a9b4728e1537abdcc04af86ffc399a7667c7a3ad35595fe38b048b'}
-        for host, digest in expected.items():
-            after = self.ok('--print', host, pi=False)
-            normalized = after.replace(str(self.package), '<source>').replace(str(self.home), '<home>')
-            self.assertEqual(hashlib.sha256(normalized.encode()).hexdigest(), digest)
+    def test_approved_role_skill_delta_and_original_hosts_unchanged_by_pi(self):
+        # The repair deliberately changes roles/skills, so the old pre-repair
+        # hashes are not this contract. Check the finite independent target map
+        # and canonical bodies, then retain byte-for-byte Pi isolation checks.
+        from effective_roles import assert_current_exports
+        from hygiene_fixtures import outputs
+        before = outputs(self.ok('--print', pi=False), self.package, self.home)
+        assert_current_exports(self, before, self.package, self.home,
+                               self.home / '.chief-of-staff')
+        self.ok()
+        after = outputs(self.ok('--print', pi=False), self.package, self.home)
+        self.assertEqual(after, before)
 
     def test_removed_practice_refuses_in_scoped_manifest_without_mutation(self):
         config = json.loads((self.package / 'profiles/example/profile.json').read_text())

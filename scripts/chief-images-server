@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+{{MARKER}}
+"""Serve the chief's published card images on loopback; `tailscale serve` exposes /chief-images to the tailnet.
+
+Only files directly inside the images folder whose names look like the ones chief-nod writes
+(letters, digits, - and _, then .png/.jpg/.jpeg/.gif/.webp) are served, read-only. There is no directory
+listing, no subfolder or symlink following, and no other route except /health.
+Selected copied images are readable by tailnet members who know the URL; the principal chooses what to share.
+
+  chief-images-server [--port 8795] [--dir ~/.chief-of-staff/images]
+"""
+import argparse
+import os
+import re
+import stat
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+TYPES = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp'}
+ROUTE = re.compile(r'^/chief-images/([A-Za-z0-9_-]{8,64})\.(png|jpe?g|gif|webp)$')
+
+
+class Handler(BaseHTTPRequestHandler):
+    folder = ''
+
+    def reply(self, status, body=b'', ctype='text/plain; charset=utf-8', head=False):
+        self.send_response(status)
+        self.send_header('Content-Type', ctype)
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        if status == 200 and ctype.startswith('image/'):
+            self.send_header('Cache-Control', 'public, max-age=3600')
+        self.end_headers()
+        if not head:
+            self.wfile.write(body)
+
+    def serve(self, head):
+        path = self.path.split('?', 1)[0]
+        if path == '/health':
+            return self.reply(200, b'ok', head=head)
+        match = ROUTE.match(path)
+        if not match:
+            return self.reply(404, b'not found', head=head)
+        full = os.path.join(self.folder, match[1] + '.' + match[2])
+        try:
+            info = os.lstat(full)
+            if not stat.S_ISREG(info.st_mode):
+                raise OSError
+            with open(full, 'rb') as f:
+                data = f.read()
+        except OSError:
+            return self.reply(404, b'not found', head=head)
+        self.reply(200, data, TYPES['jpg' if match[2] == 'jpeg' else match[2]], head)
+
+    def do_GET(self):
+        self.serve(False)
+
+    def do_HEAD(self):
+        self.serve(True)
+
+    def log_message(self, *args):
+        pass
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
+    ap.add_argument('--port', type=int, default=8795)
+    ap.add_argument('--dir', default='~/.chief-of-staff/images')
+    args = ap.parse_args()
+    Handler.folder = os.path.realpath(os.path.expanduser(args.dir))
+    os.makedirs(Handler.folder, exist_ok=True)
+    ThreadingHTTPServer(('127.0.0.1', args.port), Handler).serve_forever()
+
+
+main()

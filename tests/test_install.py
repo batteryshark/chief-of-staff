@@ -43,18 +43,37 @@ class InstallTest(unittest.TestCase):
             self.assertIn('LEAD.md', text, path)
         self.assertIn('name: lead\n', (self.e.home / '.claude/agents/lead.md').read_text())
         chief = (self.e.home / '.config/opencode/agents/chief-of-staff.md').read_text()
-        self.assertIn('\n# Chief of staff\n', chief)
-        self.assertIn('agent: "lead"', chief)
-        self.assertIn('[lead] <Project>', chief)
+        self.assertIn('\n# Chief\n', chief)
+        self.assertIn('reset-worker-dispatch', chief)
+        worker = self.e.home / '.config/opencode/skills/reset-worker-dispatch/SKILL.md'
+        self.assertIn('approved whole goal/handover, lead agent', worker.read_text())
+
+    def test_visual_preview_guidance_renders_for_chief_and_lead(self):
+        code, out = self.e.install('opencode', 'claude', 'codex')
+        self.assertEqual(code, 0, out)
+        for path in ('.config/opencode/agents/chief-of-staff.md',
+                     '.claude/agents/chief-of-staff.md',
+                     '.claude/output-styles/chief-of-staff.md',
+                     '.codex/chief-of-staff.config.toml'):
+            text = (self.e.home / path).read_text()
+            # The accepted lean core replaces preview-copy choreography with
+            # outcome/voice guidance; native file edit boundaries stay intact.
+            self.assertIn('phone-usable results for visual/taste review', text, path)
+            self.assertIn('silent detail', text, path)
+        for path in ('.config/opencode/agents/lead.md', '.claude/agents/lead.md',
+                     '.codex/lead.config.toml'):
+            self.assertIn('reset-worker-dispatch', (self.e.home / path).read_text(), path)
+        worker = self.e.home / '.config/opencode/skills/reset-worker-dispatch/SKILL.md'
+        self.assertIn('headless/offscreen', worker.read_text())
 
     def test_stop_conditions_reach_chief_and_lead(self):
         code, out = self.e.install('claude')
         self.assertEqual(code, 0, out)
         chief = (self.e.home / '.claude/agents/chief-of-staff.md').read_text()
-        self.assertIn('**Stop conditions.**', chief)
-        self.assertIn('**Continue or shelve.**', chief)
+        self.assertIn('After the principal rejects the same thing twice', chief)
+        self.assertIn('No restart until their decision', chief)
         lead = (self.e.home / '.claude/agents/lead.md').read_text()
-        for section in ('## Stop conditions', "## Attempts that didn't work", 'First step on resume'):
+        for section in ('STOP project work', 'No resume before their decision', 'failed approaches'):
             self.assertIn(section, lead)
 
     def test_uninstall_removes_lead_agents(self):
@@ -62,6 +81,22 @@ class InstallTest(unittest.TestCase):
         code, out = self.e.install('--uninstall', 'opencode', 'claude', 'codex')
         self.assertEqual(code, 0, out)
         self.assertFalse((self.e.home / '.claude/agents/lead.md').exists())
+
+    def test_inbox_dirs_preserve_existing_entries_and_personal_state(self):
+        code, out = self.e.install('home')
+        self.assertEqual(code, 0, out)
+        self.assertTrue((self.e.brief / 'archive/inbox').is_dir())
+        keep = {self.e.brief / name: content for name, content in (
+            ('inbox/fixture.md', 'unprocessed fixture'),
+            ('archive/inbox/old.md', 'processed fixture'),
+            ('open.md', 'concurrent open items'), ('principal.md', 'personal'),
+            ('brief.md', 'personal brief'))}
+        for path, content in keep.items():
+            path.write_text(content)
+        code, out = self.e.install('home')
+        self.assertEqual(code, 0, out)
+        for path, content in keep.items():
+            self.assertEqual(path.read_text(), content)
 
 
 class PortfolioTest(unittest.TestCase):
@@ -100,9 +135,12 @@ class PortfolioTest(unittest.TestCase):
                              f'{lantern}/LEAD.md\n| Gone | {self.root}/Gone/LEAD.md |\n')
         self.assertIn('Orchard · lead unknown', out)
         self.assertEqual(out.count('Lantern · lead unknown'), 1, out)
-        self.assertIn('Lantern status line.', out)
-        self.assertIn('Lantern question.', out)
-        self.assertIn('Gone/LEAD.md: log missing', out)
+        # Legacy fallback text is not authenticated current status or a principal
+        # ask. The accepted portfolio behavior flags clarification, not raw replay.
+        self.assertNotIn('Lantern status line.', out)
+        self.assertNotIn('Lantern question.', out)
+        self.assertIn('Agent-owned: lead to clarify', out)
+        self.assertIn('Gone · no lead · LEAD fallback · log updated unknown/missing', out)
 
 
 if __name__ == '__main__':

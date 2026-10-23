@@ -1,0 +1,9 @@
+{
+  "base": "heartbeat-reset-pilot.json",
+  "migrationGate": {"event": "event_fixture", "originSession": "ses_origin", "key": "fixture"},
+  "postOnlyRecipients": [
+    {"session": "ses_project_one", "directory": "/fixture/project-one", "standingSections": []},
+    {"session": "ses_project_two", "directory": "/fixture/project-two", "standingSections": []},
+    {"session": "ses_project_three", "directory": "/fixture/project-three", "standingSections": []}
+  ]
+}

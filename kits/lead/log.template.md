@@ -11,6 +11,11 @@
     ## Waiting on the principal
     - YYYY-MM-DD: the question as sent to {{OWNER_NAME}}. Default if unanswered: ...
 
+    ## Operating card (when needed)
+    (Link a short artifact-side operating card in an ALREADY
+    AUTHORIZED readable path: artifact/URL, actual available operations, accepted state,
+    next owner action and constraints. No new grants, writer, service or reinjection.)
+
     ## Stop conditions
     - Principal: (each one from {{OWNER_NAME}}'s handover)
     - <lane>: stop and rethink if <observable condition>

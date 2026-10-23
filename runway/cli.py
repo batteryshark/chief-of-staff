@@ -10,8 +10,9 @@ import urllib.request
 from pathlib import Path
 
 from .ledger import Ledger
-from .policy import timestamp, validate, instant
+from .policy import timestamp, validate, instant, validate_exclusions
 from .usage import assess, burn_lines, table
+from .checkout import checkout_identity
 
 
 def registration():
@@ -72,10 +73,11 @@ class LocalAPI:
         info['location']['directory'] = str(Path(info['location']['directory']).resolve())
         return info
 
-    def idle_evidence(self, sid, expected_directory):
+    def idle_evidence(self, sid, expected_directory, *, quota_only=False):
         path = '/api/session/' + urllib.parse.quote(sid, safe='')
         info = self.session(sid)
-        if info.get('location', {}).get('directory') != expected_directory:
+        directory = info.get('location', {}).get('directory')
+        if directory != expected_directory and not quota_only:
             raise ValueError('session moved; reconcile its worktree before releasing admission')
         active = self.get('/api/session/active')['data']
         pending = self.get(path + '/inbox')['data']
@@ -84,15 +86,48 @@ class LocalAPI:
         # These are independent observations, not a native lock. Recheck immediately before sending.
         idle = info.get('time', {}).get('idle')
         idle_at = timestamp(idle / 1000) if isinstance(idle, (int, float)) else idle
-        return {'last_idle_at': idle_at, 'session_id': sid, 'idle': sid not in active, 'inbox_empty': not pending and not permissions and not forms,
+        return {'last_idle_at': idle_at, 'session_id': sid, 'session_directory': directory,
+                'directory_matches': directory == expected_directory,
+                'idle': sid not in active, 'inbox_empty': not pending and not permissions and not forms,
                 'outcome': info.get('outcome'), 'observed_at': timestamp(time.time())}
+
+    def provider_failure(self, attempt):
+        # V2 @opencode/client 2.0.23 SessionMessageAssistant.error, not tool errors,
+        # transcript text, session outcome alone, or an HTTPError from this reader.
+        data = self.get('/api/session/' + urllib.parse.quote(attempt['session_id'], safe='') +
+                        '/message', limit=5, order='desc', type='assistant')['data']
+        for message in data:
+            ref = message.get('model') or {}
+            at = message.get('time', {}).get('created')
+            if (message.get('type') != 'assistant' or message.get('finish') != 'error' or
+                    f"{ref.get('providerID')}/{ref.get('id')}" != attempt['model'] or
+                    not isinstance(at, (int, float)) or at / 1000 < instant(attempt['created_at'])):
+                continue
+            error = message.get('error')
+            if isinstance(error, dict) and isinstance(error.get('message'), str):
+                at = message.get('time', {}).get('completed') or at
+                # Structured provider response body is part of this assistant failure,
+                # unlike arbitrary transcript/tool output. Bound it and never echo it.
+                body = (error.get('response') or {}).get('body', '')
+                text = error['message'][:4000] + ('\n' + body[:11999] if isinstance(body, str) else '')
+                return {'message': text, 'status': error.get('status'),
+                        'observed_at': timestamp(at / 1000), 'key': message['id'],
+                        'provenance': 'native assistant.error'}
+        return None
 
 
 def handle(req, config, ledger, quota, host):
     action = req['action']
+    if action == 'dispatch-get':
+        return ledger.dispatch_get(req['attempt'])
+    if action == 'dispatch-save':
+        return ledger.dispatch_save(req['attempt'], req['value'], req['expected_state'], time.time())
+    if action == 'dispatch-incomplete':
+        return ledger.dispatch_incomplete(req['attempt'], req['input_id'])
     if action == 'status':
         if req.get('format') == 'json':
             return {'attempts': ledger.attempts(), 'preference': ledger.preference(req.get('scope', '')),
+                    'cooldowns': ledger.cooldowns(),
                     'routes': config.get('routes', []), 'snapshot': quota.get('/api/v1/snapshot')}
         return Text(status_text(config, ledger, quota.get('/api/v1/snapshot'), req.get('scope', '')))
     if action == 'usage':
@@ -112,8 +147,11 @@ def handle(req, config, ledger, quota, host):
         return ledger.prefer(config, quota.get('/api/v1/snapshot'), req['scope'],
                              req['route'], req['window'], time.time())
     if action in ('plan', 'prepare'):
+        exclusions = req.get('exclude_routes', [])
+        validate_exclusions(config, exclusions)
         task = dict(req['task'])
         task['directory'] = str(Path(task['directory']).expanduser().resolve(strict=True))
+        checkout_identity(task)
         # Fetch both within this request; do not accept caller-supplied availability.
         snapshot = quota.get('/api/v1/snapshot')
         catalog = host.catalog(task['directory'], [r['model'] for r in config['routes']])
@@ -123,21 +161,61 @@ def handle(req, config, ledger, quota, host):
                 evidence = host.idle_evidence(previous[-1]['session_id'], task['directory'])
                 if not evidence['idle'] or not evidence['inbox_empty']:
                     raise ValueError('continuation session became active or has queued work; reconcile it first')
-        result = ledger.plan(config, snapshot, catalog, task, time.time(), admit=action == 'prepare')
+        result = ledger.plan(config, snapshot, catalog, task, time.time(), admit=action == 'prepare', exclude_routes=exclusions)
         return result if req.get('format') == 'json' else compact_plan(result)
     if action == 'bind':
         return compact_attempt(ledger.bind(req['attempt'], host.session(req['session']), time.time()), req)
+    if action == 'report-failure':
+        if req.get('provider_failure') is not None:
+            failure = dict(req['provider_failure'])
+            failure['provenance'] = 'reported'
+        else:
+            a = ledger.get(req['attempt'])
+            if not a.get('session_id') or not a.get('bound_at'):
+                raise ValueError('provider failure requires a dispatched, bound attempt')
+            if host is None:
+                raise ValueError('native server required for automatic failure observation; or relay provider_failure')
+            failure = host.provider_failure(a)
+            if failure is None:
+                return {'recorded': False, 'reason': 'no native provider failure in bounded assistant page; relay known error explicitly'}
+        return ledger.report_failure(req['attempt'], failure, time.time())
     if action == 'finish':
         a = ledger.get(req['attempt'])
+        observation = None
+        if req.get('provider_failure') is not None:
+            failure = dict(req['provider_failure'])
+            failure['provenance'] = 'reported'
+            observation = ledger.report_failure(a['id'], failure, time.time())
+        elif a.get('session_id') and a.get('bound_at') and hasattr(host, 'provider_failure'):
+            try:
+                failure = host.provider_failure(a)
+                if failure:
+                    observation = ledger.report_failure(a['id'], failure, time.time())
+            except (ValueError, OSError, KeyError, TypeError):
+                observation = {'recorded': False, 'reason': 'native failure observation unavailable; use report-failure if known'}
         evidence = {key: req.get(key) for key in ('confirmed_not_sent', 'tools_reconciled', 'effects_reconciled')}
-        if req['state'] not in ('unsent', 'uncertain'):
+        if req['state'] != 'unsent' and a.get('session_id'):
+            try:
+                evidence.update(host.idle_evidence(a['session_id'], a['task']['directory'],
+                                                  **({'quota_only': True} if req['state'] == 'uncertain' else {})))
+            except (ValueError, OSError) as exc:
+                if req['state'] != 'uncertain':
+                    raise
+                # Recording uncertainty must remain possible during native outages.
+                # No verified idle evidence means no quota or ownership release.
+                evidence['native_check'] = 'unavailable: ' + type(exc).__name__
+        elif req['state'] not in ('unsent', 'uncertain'):
             if not a.get('session_id'):
                 raise ValueError('bind the confirmed session before releasing this attempt')
-            evidence.update(host.idle_evidence(a['session_id'], a['task']['directory']))
         checkpoint = dict(req.get('checkpoint') or {})
         if checkpoint.get('directory'):
             checkpoint['directory'] = str(Path(checkpoint['directory']).expanduser().resolve())
-        return compact_attempt(ledger.finish(req['attempt'], req['state'], checkpoint, evidence, time.time()), req)
+        if checkpoint.get('checkout'):
+            checkpoint['checkout'] = str(Path(checkpoint['checkout']).expanduser().resolve())
+        result = compact_attempt(ledger.finish(req['attempt'], req['state'], checkpoint, evidence, time.time()), req)
+        if observation:
+            result = {**result, 'failure_observation': observation}
+        return result
     raise ValueError('unknown action')
 
 
@@ -157,7 +235,12 @@ def status_text(config, ledger, snapshot, scope):
     open_attempts = [a for a in ledger.attempts() if a['state'] in ACTIVE]
     lines.append(f'Open attempts: {len(open_attempts)}.')
     for a in open_attempts[-12:]:
-        lines.append(f"- {a['job']} | {a['state']} | {a['route']} | session {a.get('session_id') or 'none'} | attempt {a['id']}")
+        lines.append(f"- {a['job']} | {a['state']} | {a['route']} | session {a.get('session_id') or 'none'} | attempt {a['id']}"
+                     f" | directory {a['task']['directory']}"
+                     + (f" | checkout {a['task']['checkout']}" if 'checkout' in a['task'] else ''))
+    for c in ledger.cooldowns():
+        if instant(c['until']) > time.time():
+            lines.append(f"Cooldown: {c['route']} | {c['model']} | {c['pool']} | until {c['until']} | {c['reason']} | {c['provenance']}")
     lines.append('Routes: ' + '; '.join(f"{r['id']}={r['model']}" + (f" {r['variant']}" if r.get('variant') else '')
                                          + f" [{','.join(r['categories'])}]" for r in config.get('routes', [])) + '.')
     return '\n'.join(lines)
@@ -167,7 +250,9 @@ def compact_attempt(a, req):
     if req.get('format') == 'json':
         return a
     keep = ('id', 'job', 'state', 'route', 'model', 'variant', 'session_id', 'message_id')
-    return {k: a.get(k) for k in keep if a.get(k) is not None}
+    result = {k: a.get(k) for k in keep if a.get(k) is not None}
+    result.update({k: a['task'][k] for k in ('directory', 'checkout') if k in a['task']})
+    return result
 
 
 def compact_plan(result):
@@ -176,7 +261,7 @@ def compact_plan(result):
     sel = result.get('selected')
     if sel:
         out['selected'] = {k: sel.get(k) for k in ('route', 'model', 'variant', 'reason')}
-    for key in ('action', 'args', 'reason', 'attempt_id'):
+    for key in ('action', 'args', 'reason', 'attempt_id', 'exclude_routes'):
         if result.get(key) is not None:
             out[key] = result[key]
     if result.get('attempt'):
@@ -193,7 +278,7 @@ def compact_plan(result):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Quota-aware chief-of-staff routing. Read routing/WORKFLOW.md before dispatch. JSON request on stdin: status, usage, plan, prepare, prefer, clear-preference, bind, finish.')
+    parser = argparse.ArgumentParser(description='Quota-aware chief-of-staff routing. Read routing/WORKFLOW.md before dispatch. JSON request on stdin: status, usage, plan, prepare, prefer, clear-preference, bind, finish, report-failure. plan/prepare accept exclude_routes.')
     parser.add_argument('--home', default=os.environ.get('CHIEF_RUNWAY_HOME', '~/.chief-of-staff/runway'))
     parser.add_argument('--server', default=os.environ.get('OPENCODE_SERVER_URL'))
     parser.add_argument('--tarmac', default='http://127.0.0.1:8767')
@@ -208,7 +293,7 @@ def main():
         server = args.server or config.get('server') or (registered[0]['url'] if len(registered) == 1 else None)
         if server:
             host = LocalAPI(server, auth=True)
-        elif req['action'] in ('status', 'usage', 'prefer', 'clear-preference'):
+        elif req['action'] in ('status', 'usage', 'prefer', 'clear-preference', 'report-failure'):
             host = None
         else:
             raise ValueError('native OpenCode server required: use runway tool or --server http://127.0.0.1:PORT')

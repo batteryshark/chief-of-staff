@@ -2,15 +2,18 @@
 {{MARKER}}
 """One compact view of every project the chief of staff tracks.
 
-Reads the LEAD.md paths listed in the brief, and prints for each project its lead's liveness, how
-fresh its log is, the first lines of its Status, and what it says is waiting on the principal. Then
-it prints the chief's own open items. The output is short on purpose: about four lines per project,
-so a catch-up across twenty projects stays cheap.
+Reads project status Notes from local OpenChamber storage for the LEAD paths in
+the brief: Landed / Next / Your part, Note age and lead liveness. Falls back to
+LEAD Status/Waiting with explicitly labelled log age. No writes or credentials.
 
     chief-portfolio            compact view
-    chief-portfolio --full     whole Status and Waiting sections
+    chief-portfolio --full     complete human-readable Note fields
+    chief-portfolio --private  internal log/open-item/inbox detail (may contain IDs)
 """
 import json
+import base64
+import math
+from datetime import datetime
 import os
 import re
 import shutil
@@ -21,6 +24,73 @@ from pathlib import Path
 
 HOME = Path(os.environ.get('CHIEF_BRIEF_DIR', '{{BRIEF_DIR}}')).expanduser()
 WIDTH = 170
+STALE_AFTER = 48 * 3600
+KNOWLEDGE = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'openchamber/projects'
+
+
+def read_small(path):
+    # Bound each local read, including a file that grows after opening.
+    with path.open('rb') as stream:
+        text = stream.read(1024 * 1024 + 1)
+    if len(text) > 1024 * 1024:
+        raise ValueError('file too large')
+    return text.decode('utf-8')
+
+
+def stamp(value):
+    try:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return value / 1000 if math.isfinite(value) and value > 0 else None
+        if isinstance(value, str):
+            date = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            return date.timestamp() if date.tzinfo else None
+    except (ValueError, OverflowError, OSError):
+        pass
+    return None
+
+
+def native_status(directory):
+    """Local OpenChamber v2 context.json only; never write or discover credentials.
+
+    A unique canonical heading selects the Note. Legacy desk Notes must be adopted
+    by their lead, not guessed from unrelated content. No cross-project scan.
+    """
+    key = base64.urlsafe_b64encode(str(directory).encode()).decode().rstrip('=')
+    try:
+        data = json.loads(read_small(KNOWLEDGE / ('path_' + key) / 'context.json'))
+        if not isinstance(data, dict) or data.get('version') != 2:
+            raise ValueError('unsupported Knowledge storage version')
+        notes = data['notes']
+        if not isinstance(notes, list):
+            raise ValueError('notes not a list')
+        candidates = [n for n in notes if isinstance(n, dict) and isinstance(n.get('body'), str)
+                      and re.match(r'^# Project status — [^\n]+\n', n['body'])]
+        if len(candidates) != 1:
+            return None, 'missing or ambiguous status Note'
+        note = candidates[0]
+        fields = {}
+        for label in ('Landed', 'Next', 'Your part', 'Updated'):
+            matches = re.findall(r'^\*\*' + label + r':\*\*[ \t]*([^\n]*)(.*?)(?=^\*\*|\Z)',
+                                 note['body'], re.M | re.S)
+            if len(matches) != 1 or not (matches[0][0] + matches[0][1]).strip():
+                return None, 'malformed status Note'
+            fields[label] = (matches[0][0] + matches[0][1]).strip()
+        # Native updatedAt is milliseconds; body Updated is an ISO fallback only.
+        updated = stamp(note.get('updatedAt'))
+        if updated is None:
+            updated = stamp(fields['Updated'])
+        return (fields, updated), None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None, 'Note storage unavailable or malformed'
+
+
+def note_age(updated, now):
+    if updated is None:
+        return 'Note age UNKNOWN'
+    if updated > now:
+        return 'Note age UNKNOWN (future timestamp)'
+    age = now - updated
+    return ('STALE! · ' if age >= STALE_AFTER else '') + 'Note updated ' + ago(age)
 
 
 def section(text, name):
@@ -47,6 +117,20 @@ def short(s, width=WIDTH):
     return s if len(s) <= width else s[:width - 1] + '…'
 
 
+TRACKING = re.compile(r'\b(?:[QP]\d+|ses_\w+)\b')
+OPAQUE = {'review', 'verify', 'verification', 'wait', 'waiting', 'pending', 'tbd', 'next', 'unknown',
+          'see', 'see also', 'blocked on', 'waiting on'}
+
+
+def human_field(value, label):
+    """Presentation only: never infer readiness, authority or a decision from prose."""
+    # Keep meaningful actions and safety holds even when a private reference is attached.
+    value = re.sub(r'\s+', ' ', TRACKING.sub('', value)).strip(' —:;,/[]()')
+    if not re.search(r'\w', value) or value.rstrip('.:').lower() in OPAQUE:
+        return f'Agent-owned: lead to clarify {label.lower()} in plain words; no principal action inferred.'
+    return value
+
+
 def ago(seconds):
     m = int(seconds // 60)
     return f'{m}m ago' if m < 60 else f'{m // 60}h ago' if m < 2880 else f'{m // 1440}d ago'
@@ -56,29 +140,76 @@ def statuses():
     tool = shutil.which('chief-openchamber') or str(Path.home() / '.local/bin/chief-openchamber')
     try:
         out = subprocess.run([tool, 'session', 'list', '--limit', '300', '--with-status', '--json'],
-                             capture_output=True, text=True, timeout=30, cwd='/tmp')
+                             capture_output=True, text=True, timeout=15, cwd=str(HOME))
         return {s['id']: (s.get('status') or {}).get('type', '?') for s in json.loads(out.stdout).get('sessions', [])}
     except Exception:
         return {}
 
 
+def inbox_summary(private=False):
+    """Immediate plain markdown files only; no recursion, symlinks or mutations."""
+    inbox = HOME / 'inbox'
+    try:
+        paths = sorted(p for p in inbox.iterdir()
+                       if p.suffix == '.md' and not p.is_symlink() and p.is_file())
+    except FileNotFoundError:
+        print('Chief inbox: 0 unread')
+        return
+    except OSError:
+        print('Chief inbox: unread count UNKNOWN (directory unreadable)')
+        return
+    print(f'Chief inbox: {len(paths)} unread')
+    if not private:
+        if paths:
+            print('  Agent-owned: chief to read and triage these reports; nothing assigned to you here.')
+        return
+    for path in paths:
+        try:
+            text = read_small(path)
+            preview = ' '.join(line.strip().lstrip('#').strip()
+                               for line in text.splitlines() if line.strip()) or '(empty entry)'
+        except (OSError, ValueError):
+            preview = '(unreadable entry)'
+        print('  - ' + short(path.name + ': ' + preview, WIDTH - 4))
+
+
 def main():
     full = '--full' in sys.argv
+    private = '--private' in sys.argv
     brief = (HOME / 'brief.md').read_text() if (HOME / 'brief.md').exists() else ''
     paths = list(dict.fromkeys(re.findall(r'(/[^\s`|)]+/LEAD\.md)', brief)))
     live = statuses()
     now = time.time()
     for p in paths:
         path = Path(p)
-        if not path.exists():
-            print(f'?  {p}: log missing\n')
-            continue
-        text = path.read_text()
+        try:
+            text = read_small(path)
+            log_age = ago(now - path.stat().st_mtime)
+        except (OSError, ValueError):
+            text, log_age = '', 'unknown/missing'
         title = re.search(r'^# (.+?)(?::\s*lead log)?\s*$', text, re.M)
         name = title.group(1) if title else path.parent.name
+        if not private and TRACKING.search(name):
+            name = TRACKING.sub('', name).strip(' —:-') or 'Project (lead to clarify name)'
         sid = re.search(r'Lead session (ses_\w+)', text)
         state = 'no lead' if not sid else f"lead {live.get(sid.group(1), 'unknown')}"
-        print(f'{name} · {state} · log updated {ago(now - path.stat().st_mtime)}')
+        native, reason = native_status(path.parent)
+        if native:
+            fields, updated = native
+            print(f'{name} · {state} · {note_age(updated, now)}')
+            for label in ('Landed', 'Next', 'Your part'):
+                value = fields[label] if private else human_field(fields[label], label)
+                value = value if full or label == 'Your part' else short(value)
+                print(f'  {label}: {value}')
+            if full:
+                print('  Updated: ' + (fields['Updated'] if private else human_field(fields['Updated'], 'Updated')))
+            print()
+            continue
+        print(f'{name} · {state} · LEAD fallback · log updated {log_age} · {reason}')
+        if not private:
+            print('  Agent-owned: lead to clarify what works, the next outcome and any exact principal ask.')
+            print('  Legacy log is not a confirmed principal action; no action inferred.\n')
+            continue
         status = entries(section(text, 'Status'))
         waiting = entries(section(text, 'Waiting on the principal'))
         for line in (status if full else status[:2]):
@@ -88,19 +219,25 @@ def main():
             for line in (waiting if full else waiting[:3]):
                 print('   - ' + (line if full else short(line, WIDTH - 5)))
         print()
+    inbox_summary(private)
     open_md = HOME / 'open.md'
     if open_md.exists():
         text = open_md.read_text()
         q = entries(section(text, 'Waiting on the principal'))
         pr = entries(section(text, 'Promised by the chief'))
-        print(f'Chief open items: {len(q)} questions, {len(pr)} promises (open.md)')
-        for line in q + pr:
-            print('  - ' + (line if full else short(line, WIDTH - 4)))
+        if private:
+            print(f'Chief open items: {len(q)} questions, {len(pr)} promises (open.md)')
+            for line in q + pr:
+                print('  - ' + (line if full else short(line, WIDTH - 4)))
+        elif q or pr:
+            print('Agent-owned: chief to triage legacy open questions and delivery promises.')
+            print('  These records are not a ready action list. Use Suggested next action in the chief dashboard.')
     chief = HOME / 'chief.json'
     if chief.exists():
         sid = json.loads(chief.read_text()).get('session')
         if sid:
-            print(f'Chief session {sid} · {live.get(sid, "unknown")}')
+            label = f'Chief session {sid}' if private else 'Chief'
+            print(f'{label} · {live.get(sid, "unknown")}')
     return 0
 
 

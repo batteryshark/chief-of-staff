@@ -1,4 +1,7 @@
-# Optional receive/file-only desk (source, not installed)
+# RETIRED / UNUSED — receive/file-only desk
+
+Q110 supersedes this experiment. Do not stage, install, resume or file reports;
+the instructions below are historical only. Leads maintain their own status Notes.
 
 Explicit opt-in for any domain chief. No default prompt/config/agent/service is
 changed. No autonomous answering. Native Knowledge Notes are primary; no Canvas,

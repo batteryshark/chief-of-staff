@@ -9,7 +9,8 @@ import unittest
 
 from courtesy_fixtures import existing_outputs
 from courtesy import body, skill, target, MARKER
-from hygiene_fixtures import outputs, pinned_print
+from hygiene_fixtures import outputs
+from effective_roles import assert_current_exports
 
 SRC = Path(__file__).resolve().parent.parent
 
@@ -29,6 +30,10 @@ class CourtesyTests(unittest.TestCase):
                     'XDG_CACHE_HOME': str(self.root / 'cache'),
                     'CHIEF_BRIEF_DIR': str(self.home / '.chief-of-staff'),
                     'PYTHONDONTWRITEBYTECODE': '1'}
+        transport = self.root / 'transport/src/plugin.js'
+        transport.parent.mkdir(parents=True)
+        transport.write_text('// Synthetic transport fixture; hashed, never loaded.\nexport default {};\n')
+        self.env.update(CHIEF_A2A_MODULE=str(transport), CHIEF_A2A_ROOT=str(transport.parent.parent))
 
     def install(self, *args, ok=True):
         p = subprocess.run(['bash', str(SRC / 'install.sh'), *args], env=self.env,
@@ -57,17 +62,14 @@ class CourtesyTests(unittest.TestCase):
         self.assertFalse(data['trigger_checks'][0]['should_trigger'])
         self.assertTrue(all(e['expected_output'] and e['files'] == [] for e in data['evals']))
 
-    def test_exact_19_cf61075_and_only_three_new_leaves(self):
-        old = self.root / 'baseline'
-        before = outputs(pinned_print('cf61075', old, self.env), old, self.home)
+    def test_approved_lean_export_delta_and_exact_courtesy_leaves(self):
         now = outputs(self.install('--print'), SRC, self.home)
-        self.assertEqual(len(now), 22)
-        self.assertEqual(existing_outputs(now), before)
+        assert_current_exports(self, now, SRC, self.home, self.home / '.chief-of-staff')
         corrupted = dict(now)
         path = '<HOME>/.claude/skills/upstream-courtesy/SKILL.md'
         corrupted[path] += '!'
         with self.assertRaises(AssertionError):
-            existing_outputs(corrupted)
+            assert_current_exports(self, corrupted, SRC, self.home, self.home / '.chief-of-staff')
 
     def test_default_all_hosts_reinstall_and_uninstall_retain_user_data(self):
         self.install()
@@ -173,6 +175,13 @@ class CourtesyTests(unittest.TestCase):
         data = json.loads(inv.read_text())
         p = home / '.opencode/skills/upstream-courtesy/SKILL.md'
         del data['owned'][str(p.relative_to(self.home))]
+        # A real pre-courtesy inventory also predates the public guide-copy
+        # addition. Remove only this test's seven owned synthetic guide leaves;
+        # a partial modern inventory is intentionally not a supported upgrade.
+        from service_resources import resource_paths
+        for guide in resource_paths(home):
+            del data['owned'][str(guide.relative_to(self.home))]
+            guide.unlink()
         inv.write_text(json.dumps(data))
         p.write_text('user skill')
         before = self.snapshot()
@@ -184,7 +193,7 @@ class CourtesyTests(unittest.TestCase):
         from courtesy_owned import OwnedSkills
         OwnedSkills(self.home, {}, rollback=True).record_path(p).unlink()
         self.install('--profile', 'example')
-        self.assertEqual(len(json.loads(inv.read_text())['owned']), 10)
+        self.assertEqual(len(json.loads(inv.read_text())['owned']), 17)  # includes seven public guide leaves
 
 
 if __name__ == '__main__':

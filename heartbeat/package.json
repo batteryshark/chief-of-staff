@@ -1,0 +1,1 @@
+{"name":"chief-heartbeat-candidate","private":true,"type":"module","scripts":{"test":"node --test --test-isolation=none test/*.test.mjs"},"main":"plugin.mjs"}

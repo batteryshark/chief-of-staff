@@ -7,11 +7,18 @@
 #   ./install.sh --routing opencode install the built quota tool and OpenCode agent
 #   ./install.sh --uninstall [hosts] remove the files this script installed
 #   ./install.sh --dry-run [hosts]   show what would change
+#   ./install.sh --role-fixture ROOT [--location PATH] stage repair-owned role fixture only
+#   ./install.sh --shell-policy LOCATION [--dry-run] exclude only the unsafe shell wrapper in one Location
+#   ./install.sh --role-binding LOCATION [--dry-run] install own-memory/exact Knowledge-plan permissions only
+#   ./install.sh --role-fleet --docket-source PATH [--include-location PATH] [--dry-run] coordinated lead migration
 #   ./install.sh --print <host>      print the rendered file(s) for a host
+#   ./install.sh --chief-permissions-only [--dry-run]  preserve prompt, repair chief edit rules
 #   ./install.sh --profile technical same legacy defaults (also the no-argument default)
 #   ./install.sh --profile example   scoped local OpenCode/home bundle
 #   ./install.sh --profile <JSON>    another domain using the explicit scoped manifest
 #   ./install.sh --profile pi       Pi 1.0 Chief and included lead prompt/skills
+#   ./install.sh --candidate-config <JSON>  absent-only local OpenCode proof clone
+#   ./install.sh --reset-pilot <JSON>  unique scoped lean role; --uninstall archives its bundle
 #   ./install.sh --profile pi --pi-capability pi-subagents --pi-capability pi-goal-x
 #
 # Each host file is rendered through scripts/render.py's explicit kit/template manifest,
@@ -24,15 +31,38 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ${1:-} == --role-fleet ]]; then
+  shift
+  exec python3 "$SRC/scripts/install-role-fleet.py" "$@"
+fi
+if [[ ${1:-} == --role-binding ]]; then
+  shift
+  exec python3 "$SRC/scripts/install-role-binding.py" "$@"
+fi
+if [[ ${1:-} == --shell-policy ]]; then
+  shift
+  exec python3 "$SRC/scripts/install-shell-policy.py" "$@"
+fi
+if [[ ${1:-} == --role-fixture ]]; then
+  shift
+  exec python3 "$SRC/scripts/install-role-fixture.py" "$@"
+fi
 BRIEF_DIR="${CHIEF_BRIEF_DIR:-$HOME/.chief-of-staff}"
 MARK="managed by chief-of-staff/install.sh"
 LEGACY_MARK="managed by orchestra-next/agents/chief-of-staff/install.sh"
 
-mode=install; hosts=(); routing=false; lead_config=""; profile="technical"; pi_caps=()
+mode=install; hosts=(); routing=false; lead_config=""; candidate_config=""; profile="technical"; pi_caps=()
+chief_permissions_only=false
+reset_pilot=""
 while (($#)); do
   case "$1" in
+    --reset-pilot) shift; reset_pilot="${1:?--reset-pilot requires a manifest}" ;;
+    --chief-permissions-only)
+      chief_permissions_only=true
+      ;;
     --profile) shift; profile="${1:?--profile requires technical, example or a manifest path}" ;;
     --lead-config) shift; lead_config="${1:?--lead-config requires a JSON file}" ;;
+    --candidate-config) shift; candidate_config="${1:?--candidate-config requires a JSON file}" ;;
     --pi-capability) shift; pi_caps+=("${1:?--pi-capability requires an ID}") ;;
     --routing) routing=true ;;
     --uninstall) mode=uninstall ;;
@@ -44,6 +74,29 @@ while (($#)); do
   esac
   shift
 done
+# The final matrix is no longer a per-edit gate. The legacy global migration
+# still lacks enrolled project bindings and would affect a running Docket lead.
+# Scoped fixes (above) can land independently; global role activation is coordinated.
+if [[ $mode == install && $profile == technical && -z $lead_config && -z ${candidate_config:-} && -z $reset_pilot && $chief_permissions_only == false && ( ${#hosts[@]} == 0 || " ${hosts[*]} " == *" opencode "* ) && -f "$HOME/.config/opencode/agents/lead.md" ]] && ! grep -qF '; lean role' "$HOME/.config/opencode/agents/lead.md"; then
+  echo 'Global role activation needs coordinated enrolled bindings; use scoped --shell-policy for the shell fix.' >&2
+  exit 2
+fi
+if [[ -n $reset_pilot ]]; then
+  [[ $profile == technical && -z $lead_config && -z ${candidate_config:-} && $chief_permissions_only == false && $routing == false && ${#pi_caps[@]} == 0 && ${#hosts[@]} == 0 ]] || { echo 'reset pilot cannot combine other targets' >&2; exit 2; }
+  exec python3 "$SRC/scripts/install-reset-pilot.py" "$reset_pilot" "$mode"
+fi
+if [[ $chief_permissions_only == true ]]; then
+  [[ $profile == technical && -z $lead_config && -z ${candidate_config:-} && $routing == false && ${#pi_caps[@]} == 0 && ${#hosts[@]} == 0 ]] || { echo 'permission-only mode cannot combine other targets' >&2; exit 2; }
+  case "$mode" in
+    install) exec python3 "$SRC/scripts/install-chief-permissions.py" "$BRIEF_DIR" "$HOME" ;;
+    dry) exec python3 "$SRC/scripts/install-chief-permissions.py" "$BRIEF_DIR" "$HOME" --dry-run ;;
+    *) echo 'permission-only mode supports install or dry-run only' >&2; exit 2 ;;
+  esac
+fi
+if [[ -n $candidate_config ]]; then
+  [[ $profile == technical && -z $lead_config && $routing == false && ${#pi_caps[@]} == 0 && ${#hosts[@]} == 0 ]] || { echo 'candidate mode cannot combine profiles, hosts, lead-config or routing' >&2; exit 2; }
+  exec python3 "$SRC/scripts/install-candidate.py" "$candidate_config" "$mode"
+fi
 if [[ $profile == pi ]]; then
   [[ -z $lead_config && $routing == false && ${#hosts[@]} == 0 ]] || { echo 'Pi preset cannot combine other hosts, lead-config or routing' >&2; exit 2; }
   if ((${#pi_caps[@]})); then
@@ -95,10 +148,29 @@ targets() {
                echo "$CP/codex-openai.yaml|$HOME/.codex/skills/checkpoint/agents/openai.yaml|$HOME/.codex/skills/checkpoint"
                echo "skills/upstream-courtesy/SKILL.md|$HOME/.codex/skills/upstream-courtesy/SKILL.md|$HOME/.codex/skills/upstream-courtesy" ;;
     bin)      echo "scripts/chief-openchamber|$HOME/.local/bin/chief-openchamber|"
-              echo "scripts/chief-portfolio|$HOME/.local/bin/chief-portfolio|" ;;
+              echo "scripts/chief-portfolio|$HOME/.local/bin/chief-portfolio|"
+              echo "scripts/nod-alert|$HOME/.local/bin/nod-alert|"
+              echo "scripts/chief-nod|$HOME/.local/bin/chief-nod|"
+              echo "scripts/chief-images-server|$HOME/.local/bin/chief-images-server|"
+              echo "services/home/reference.md|$HOME/.local/share/chief-of-staff/home-infra.md|$HOME/.local/share/chief-of-staff" ;;
     home)     echo "kits/chief/memory/AGENTS.md|$BRIEF_DIR/AGENTS.md|"
               echo "kits/chief/memory/CLAUDE.md|$BRIEF_DIR/CLAUDE.md|" ;;
   esac
+  if [[ $1 == opencode || $1 == claude || $1 == codex ]]; then
+    local base="$HOME/.$1/skills"
+    [[ $1 == opencode ]] && base="$HOME/.config/opencode/skills"
+    local name
+    for name in delivery-outlook comparative-review; do
+      echo "kits/shared/skills/$name.md|$base/$name/SKILL.md|$base/$name"
+    done
+    for name in worker-dispatch worktree-safety dispatch-events checkpoint reporting delivery-outlook comparative-review shape upstream-courtesy; do
+      if [[ $1 == opencode ]]; then
+        echo "reset-procedure:reset-$name|$base/reset-$name/SKILL.md|$base/reset-$name"
+      else
+        echo "reset-procedure:reset-$name|$HOME/.local/share/chief-of-staff/reset/reset-$name.md|"
+      fi
+    done
+  fi
 }
 
 render() { # template -> stdout
@@ -184,6 +256,7 @@ for host in "${hosts[@]}"; do
   done < <(targets "$host")
 done
 if [[ $mode == install || $mode == dry ]]; then
+  if [[ $mode == install ]]; then mkdir -p "$BRIEF_DIR/inbox" "$BRIEF_DIR/archive/inbox"; fi
   seed_brief
   seed models.md models.md
   seed kits/chief/memory/open.md open.md

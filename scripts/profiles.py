@@ -40,6 +40,8 @@ def compose(profile, home, shared_home, runway_home, directory):
     # Reuse the independent lead schema/composer, not chief-owned workflows.
     from render import pack_values, owner_values
     values = {**pack_values(profile['lead_packs']),
+              'APPROVED_PLAN_AUTHORITY': read('kits/shared/approved-plan-authority.md'),
+              'OPERATIONAL_RECORD': '',
               **owner_values(dict(mode='agent', pointer=str(home / 'chief.json'), label=ident + ' chief')),
               'INTRO': 'You are the lead for one outcome. Own the plan, bounded jobs, decisions, verification and log.',
               'MODEL_POLICY': f'## Shared models and usage\n\nRead `{shared_home}/models.md` as the shared authority; do not copy or edit it. The shared Runway registry/ledger is `{runway_home}`. Use only available authorized tools or ask the technical owner for routing assistance. Paid use needs explicit outcome approval. Keep lead quality Strong; checkpoint before moving workers.',

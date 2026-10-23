@@ -20,9 +20,19 @@
 
 ## Constraints
 - <time, money, providers and quota, platform, licensing / ToS, data, skills>
+- <explicit principal decisions for any non-model spending or principal-data destruction; existing constraints remain>
+
+## Environment
+- Host: <where it runs>
+- Existing services: <related services and where they live>
+- Devices and network: <devices, addresses, quirks>
+- Credential handover: <how the principal is comfortable sharing, path/env/paste>
 
 ## Approach and options considered
 - Leaning: <the current shape of the solution>
+- Setup: <foreseeable installs/downloads and background services; Fleet registration on macOS, or none>
+- Hands: <account sign-ins and other principal-only steps, or none; agents never borrow credentials>
+- Publication: <publishing/push destinations and intended outward actions, or none; respect existing fetch-only/no-push constraints>
 - Considered: <option> — <why not, or why still open>
 
 ## Decisions

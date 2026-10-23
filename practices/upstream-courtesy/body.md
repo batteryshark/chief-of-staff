@@ -4,6 +4,23 @@ Assume a human maintainer reads every submission. Their time is scarce: send
 useful, legitimate, reproducible bugs, not AI-generated noise or floods.
 These rules apply to reports, issues, comments, patches, PRs and follow-ups.
 
+## Local modifications and licensing
+
+- Fork only if we modify upstream code: keep attribution and reference the fork
+  over maintainer outreach for local modifications. Unmodified upstream code is
+  referenced or included/vendored with its notices, whichever fits the project.
+  A missing upstream LICENSE alone is no reason to block, ask, file an issue or
+  escalate; handle an objection if raised. This operating policy does not assert
+  a permission grant from a public repo or missing file.
+- Use our own licence for our own work in our repositories, not to relicense copied
+  third-party code. Keep bundled dependencies' shipped notices, attribution and
+  explicit existing terms; never strip or invent licence text. Skip exhaustive
+  licence chaining or provenance audits unless an obvious real legal risk needs
+  attention; a missing file alone is not that exception.
+- Actual forks, pushes and other outward steps still follow the approved plan and
+  reserved approvals. Real bug reports, patches and submissions still follow the
+  courtesy and principal-approval rules below; no automatic contact or floods.
+
 ## 1. Triage before drafting
 
 - Establish a real, plausibly generalizable bug on a supported/documented path.

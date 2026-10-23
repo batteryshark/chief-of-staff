@@ -4,11 +4,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {fileURLToPath} from 'node:url';
-import {_tools} from '../../opencode-a2a/src/plugin.js';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {leadStartTool,controlRequester} from '../hosts/domain-policy/lead-start.mjs';
 import {validateDirectory,resolveOwner,prepareHandoff,receiveHandoff,deliveryOutcome} from '../services/directory/local.mjs';
 import {makePlugin,filterCatalog,canEdit} from '../hosts/domain-policy/index.mjs';
+
+// Explicit external source selection preserves the real descriptor/capture
+// contract without assuming a private sibling checkout or vendoring transport.
+// _tools builds descriptors only; no transport setup or live host is loaded.
+const transportSource=process.env.CHIEF_A2A_TEST_MODULE;
+if (!transportSource || !path.isAbsolute(transportSource))
+  throw Error('Set CHIEF_A2A_TEST_MODULE to the approved absolute opencode-a2a src/plugin.js for development tests.');
+const transportModule=pathToFileURL(transportSource).href;
+const {_tools}=await import(transportModule);
 
 function fixture(t) {
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'domain-fixture-')));
@@ -21,7 +29,7 @@ function fixture(t) {
   fs.writeFileSync(file,JSON.stringify(directory));
   const pointer=(dir,session='ses_fixture')=>fs.writeFileSync(path.join(dir,'chief.json'),JSON.stringify({session,directory:dir,updated:new Date().toISOString()}));
   pointer(tech,'ses_tech');pointer(home,'ses_chief');
-  const transport_module=new URL('../../opencode-a2a/src/plugin.js',import.meta.url).href;
+  const transport_module=transportModule;
   const config={id:'example',home,directory:file,chief_agent:'example-chief',lead_agent:'example-lead',worker_agent:'example-worker',
     managed_paths:[path.join(home,'AGENTS.md'),path.join(home,'managed-extra.md')],transport_module,
     transport_sha256:createHash('sha256').update(fs.readFileSync(fileURLToPath(transport_module))).digest('hex')};

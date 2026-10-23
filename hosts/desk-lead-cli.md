@@ -1,4 +1,6 @@
-**Escalations and milestones.** The report recipient is not authority. Before EVERY send,
+**RETIRED / UNUSED.** Do not use this historical route; leads write their own status Notes.
+
+**Historical escalations and milestones.** The report recipient is not authority. Before EVERY send,
 resolve the current route with `python3 {{DESK_HOME}}/desk/desk.py --home {{DESK_HOME}} resolve`
 and stdin JSON `{"project":"{{DESK_PROJECT}}","lead":"<actual lead session id>"}`.
 Only a successful validated resolution supplies the recipient session and directory:

@@ -1,0 +1,11 @@
+{
+  "executeAfterSeen": false,
+  "persistedErrorType": "aborted",
+  "session": "ses_fixture_rejected",
+  "agent": "fixture-agent",
+  "source": {"messageID": "msg_fixture_rejected", "id": "call_fixture_rejected"},
+  "nativeAskedEvent": "evt_fixture_asked",
+  "nativeRejectedEvent": "evt_fixture_rejected",
+  "requestID": "per_fixture_rejected",
+  "action": "read"
+}

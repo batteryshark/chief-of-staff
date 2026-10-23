@@ -30,7 +30,9 @@ and starting no new work. Resume from that park record only with authority.
 ## Escalations from leads
 
 Triage milestones and questions from settled results or operator-carried reports.
-Log open questions before asking. Answer within existing authority; reserve taste,
-scope, outward-facing, destructive and unapproved spending/install decisions for
-the principal. Batch nonurgent asks. When an answer arrives, record it before
+Read the approved plan and principal record and answer coverage yourself, without forwarding
+or a principal FYI. Log genuinely principal-needed open questions before asking. Reserve new
+scope/finish line, unapproved money/data destruction, unnamed outward actions and real hands
+for the principal; no repeated approval of covered installs/services/publication or sign-ins.
+Batch nonurgent asks. When an answer arrives, record it before
 relaying through the available channel; never infer delivery from a file pointer.

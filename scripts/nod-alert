@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+{{MARKER}}
+"""Send one plain alert card to Nod (POST /api/v1/requests). Synchronous; no retries, no service.
+
+Config: NOD_BASE_URL (default http://127.0.0.1:8767), and the issuer token from
+NOD_ISSUER_TOKEN or the file named by NOD_ISSUER_TOKEN_FILE. The token is never printed or logged.
+"""
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+DEFAULT_URL = 'http://127.0.0.1:8767'
+
+
+def token():
+    value = os.environ.get('NOD_ISSUER_TOKEN', '')
+    path = os.environ.get('NOD_ISSUER_TOKEN_FILE', '')
+    if not value and path:
+        try:
+            value = open(os.path.expanduser(path)).read()
+        except OSError as e:
+            sys.exit(f'nod-alert: cannot read NOD_ISSUER_TOKEN_FILE: {e.strerror}')
+    value = value.strip()
+    if not value:
+        sys.exit('nod-alert: set NOD_ISSUER_TOKEN or NOD_ISSUER_TOKEN_FILE to your issuer token')
+    return value
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
+    ap.add_argument('title', help='the alert in one sentence (max 200 characters)')
+    ap.add_argument('--summary', help='short scan line')
+    ap.add_argument('--body', help='detail, Markdown')
+    ap.add_argument('--channel', default='default', help='channel id (default: default)')
+    ap.add_argument('--dedupe-key', help='retry id for a pending request in the same channel')
+    ap.add_argument('--dry-run', action='store_true', help='print the request and exit without sending')
+    args = ap.parse_args()
+    payload = {'title': args.title, 'channel_id': args.channel}
+    if args.summary:
+        payload['summary'] = args.summary
+    if args.body:
+        payload['body_markdown'] = args.body
+    if args.dedupe_key:
+        payload['dedupe_key'] = args.dedupe_key
+    url = os.environ.get('NOD_BASE_URL', DEFAULT_URL).rstrip('/') + '/api/v1/requests'
+    if args.dry_run:
+        print(f'POST {url}\n{json.dumps(payload, indent=2)}')
+        return
+    req = urllib.request.Request(url, json.dumps(payload).encode(), method='POST', headers={
+        'Authorization': 'Bearer ' + token(), 'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            body = json.load(r)
+    except urllib.error.HTTPError as e:
+        sys.exit(f'nod-alert: HTTP {e.code} {e.reason}')
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        sys.exit(f'nod-alert: send failed: {e}')
+    print('sent request_id=%s deduped=%s' % (body.get('request_id'), body.get('deduped')))
+
+
+main()

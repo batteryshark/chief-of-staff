@@ -132,6 +132,20 @@
       ],
       "max_parallel": 2,
       "reserve_percent": 5
+    },
+    {
+      "id": "gpt-astra-ultrafast", "host": "local", "model": "openai/gpt-6-astra-ultrafast",
+      "variant": "high", "source": "codex", "provider": "codex", "account": "",
+      "pool": "codex-default", "windows": "all", "categories": ["research", "implement", "hard"],
+      "max_parallel": 2, "reserve_percent": 5, "priority": 2,
+      "unavailable_transports": ["openchamber"]
+    },
+    {
+      "id": "gpt-astra-fast", "host": "local", "model": "openai/gpt-6-astra-fast",
+      "variant": "high", "source": "codex", "provider": "codex", "account": "",
+      "pool": "codex-default", "windows": "all", "categories": ["research", "implement", "hard"],
+      "max_parallel": 2, "reserve_percent": 5, "priority": 1,
+      "unavailable_transports": ["openchamber"]
     }
   ]
 }

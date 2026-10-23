@@ -43,39 +43,30 @@ class ModularTests(unittest.TestCase):
         return subprocess.run(['bash', str(SRC / 'install.sh'), *args], env=self.env,
                               capture_output=True, text=True, timeout=120)
 
-    def test_default_parity_against_original_installer_all_managed_outputs(self):
-        # Original bytes, not a reconstructed expected prompt. No checkout/reset.
-        old = self.root / 'baseline'
-        old.mkdir()
-        files = subprocess.run(['git', 'ls-tree', '-r', '--name-only', 'ac83f44'],
-                               cwd=SRC, capture_output=True, text=True, check=True, timeout=20).stdout.splitlines()
-        prefixes = ('hosts/', 'workflows/', 'chief-home/')
-        for name in files:
-            if name in ('install.sh', 'prompt.md', 'lead.md', 'models.md',
-                        'scripts/chief-openchamber', 'scripts/chief-portfolio') or name.startswith(prefixes):
-                data = subprocess.run(['git', 'show', f'ac83f44:{name}'], cwd=SRC,
-                                      capture_output=True, check=True, timeout=20).stdout
-                path = old / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(data)
-        before = subprocess.run(['bash', str(old / 'install.sh'), '--print'], env=self.env,
-                                capture_output=True, text=True, check=True, timeout=120).stdout
-        result = self.run_install('--print')
+    def test_current_startup_and_checkpoint_exports_are_explicit(self):
+        # Historical byte parity would require restoring retired startup/ledger
+        # authority. Check current export identities and canonical bodies instead.
+        result = self.run_install('--print', 'opencode', 'home')
         self.assertEqual(result.returncode, 0, result.stderr)
-        # Only exact hash-pinned insertions at six named output positions may differ.
-        # The pre-existing ac83f44 guard still checks every other byte/older addition.
-        normalized = without_hygiene(existing_outputs(outputs(result.stdout, SRC, self.home)))
-        after = ''.join('=== ' + path + '\n' + text for path, text in normalized.items())
-        after = after.replace('<HOME>', str(self.home)).replace('<SOURCE>', str(SRC))
-        for addition in (render.LEVELS, render.OWNER_SAFETY, render.read('kits/shared/docket.md'),
-                         render.read('kits/shared/fleet.md'), render.read('services/directory/instructions.md')):
-            after = after.replace('\n\n' + addition, '')
-        # Added after the split: sessions stay in the project folder (OpenChamber 2.4.0 worktree moves).
-        _, marker, rule = json.loads(render.read('practices/engineering/lead.json'))['WORKSPACE'].partition('\n- Sessions stay')
-        self.assertTrue(marker)
-        after = after.replace(marker + rule, '')
-        self.assertEqual(before.replace(str(old), '<SOURCE>'), after.replace(str(SRC), '<SOURCE>'))
-        self.assertEqual(result.stdout.count('=== '), 22)
+        chunks = result.stdout.split('=== ')[1:]
+        names = [chunk.split('\n', 1)[0] for chunk in chunks]
+        self.assertEqual(len(names), len(set(names)))
+        from service_resources import resource_paths
+        guides = resource_paths(self.home / '.chief-of-staff')
+        self.assertEqual(len(names), 18 + len(guides))  # same role/procedure leaves plus public guides
+        for guide in guides:
+            self.assertIn(str(guide), names)
+        actual = {chunk.split('\n', 1)[0]: chunk.split('\n', 1)[1].rstrip() for chunk in chunks}
+        brief = self.home / '.chief-of-staff'
+        self.assertEqual(actual[str(brief / 'AGENTS.md')],
+                         render.render('kits/chief/memory/AGENTS.md', str(brief)).rstrip())
+        command = actual[str(self.home / '.config/opencode/commands/checkpoint.md')]
+        self.assertEqual(command,
+                         render.render('workflows/checkpoint/hosts/opencode-command.md', str(brief)).rstrip())
+        self.assertNotIn('507eed6d', command)
+        self.assertNotIn('Ops alone', command)
+        for role in ('chief-of-staff', 'lead'):
+            self.assertIn(str(self.home / f'.config/opencode/agents/{role}.md'), actual)
 
     def test_default_install_and_reinstall_preserve_seeds_and_bindings(self):
         result = self.run_install()
@@ -87,24 +78,34 @@ class ModularTests(unittest.TestCase):
         shape = (self.home / '.config/opencode/commands/shape.md').read_text()
         checkpoint = (self.home / '.config/opencode/commands/checkpoint.md').read_text()
         self.assertIn('agent: chief-of-staff', shape)
-        self.assertIn('agent `chief-of-staff`', checkpoint)
+        # Checkpoint no longer starts a hard-coded replacement chief and writes
+        # its pointer by implication; fresh ownership requires a safe handoff.
+        self.assertIn('explicit authorized handoff', checkpoint)
+        self.assertIn('successor acceptance', checkpoint)
         lead = (self.home / '.config/opencode/agents/lead.md').read_text()
         self.assertIn(str(home / 'chief.json'), lead)
-        self.assertIn('returnResult: true', lead)
+        self.assertIn('reset-worker-dispatch', lead)
+        self.assertIn('returnResult:true',
+                      (self.home / '.config/opencode/skills/reset-worker-dispatch/SKILL.md').read_text())
 
     def test_authorized_levels_and_docket_reach_both_prompts(self):
         result = self.run_install('--print', 'opencode')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.count('## Shared services: Docket'), 2)
-        self.assertEqual(result.stdout.count('L1 principal'), 2)
-        self.assertIn("Docket checkout's `AGENT_USAGE.md`", result.stdout)
+        # Service methods are explicit-load procedures, not always-loaded host fragments.
+        for template in ('hosts/opencode.md', 'hosts/opencode-lead.md'):
+            role = render.render(template, str(self.home / '.chief-of-staff'))
+            self.assertNotIn('## Shared services:', role)
+            self.assertIn('reset-worker-dispatch', role)
+        self.assertIn((SRC / 'kits/shared/docket.md').read_text().strip(), result.stdout)
         self.assertIn('do not add a sleep/poll loop', result.stdout)
-        self.assertEqual(result.stdout.count('## Shared services: Fleet'), 2)
+        self.assertEqual(result.stdout.count('## Shared services: Fleet'), 1)
         for phrase in ('fleet add', 'fleet adopt', 'health probe and group',
                        "Fleet checkout's `README.md`", '~/.config/fleet/services.json',
                         "Check the operator's existing registry", 'avoid duplicate',
                         'no permission to probe, start or install services'):
             self.assertIn(phrase, result.stdout)
+
+        self.assertIn((SRC / 'kits/shared/fleet.md').read_text().strip(), result.stdout)
 
     def test_each_pack_is_real_and_attachable(self):
         checks = {'engineering': ('git worktree', 'parent before the child', 'tests, evidence'),
@@ -129,7 +130,7 @@ class ModularTests(unittest.TestCase):
         result = self.run_install(config=self.config)
         self.assertEqual(result.returncode, 0, result.stderr)
         paths = list(self.home.rglob('*'))
-        self.assertEqual(sum(p.is_file() for p in paths), 12)  # nine outputs + three exact private receipts
+        self.assertEqual(sum(p.is_file() for p in paths), 18)  # fifteen outputs + three exact private receipts
         from courtesy_owned import OwnedSkills, digest
         from courtesy import target as courtesy_target
         receipts = {OwnedSkills(self.home, {}).record_path(courtesy_target(self.home, h))
@@ -252,7 +253,7 @@ class ModularTests(unittest.TestCase):
         result = self.run_install('opencode', 'claude', 'codex')
         self.assertEqual(result.returncode, 0, result.stderr)
         defaults = {p: p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
-        self.assertIn('Run the `checkpoint` skill',
+        self.assertIn('reset-checkpoint',
                       (self.home / '.config/opencode/agents/lead.md').read_text())
         result = self.run_install(config=self.config)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -267,11 +268,11 @@ class ModularTests(unittest.TestCase):
         detached.mkdir()
         for name in ('install.sh', 'scripts/render.py', 'scripts/install-lead.py',
                      'scripts/install_paths.py', 'scripts/courtesy.py', 'scripts/courtesy_owned.py',
-                     'kits/shared/docket.md', 'kits/shared/fleet.md'):
+                     'kits/shared/docket.md', 'kits/shared/fleet.md', 'kits/shared/approved-plan-authority.md'):
             target = detached / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(SRC / name, target)
-        for name in ('kits/lead', 'practices/research', 'practices/upstream-courtesy'):
+        for name in ('kits/lead', 'kits/shared/skills', 'practices/research', 'practices/upstream-courtesy'):
             shutil.copytree(SRC / name, detached / name)
         for name in ('kits/chief', 'profiles', 'hosts', 'workflows', 'routing', 'runway'):
             self.assertFalse((detached / name).exists())
@@ -282,7 +283,7 @@ class ModularTests(unittest.TestCase):
                                     env=self.env, capture_output=True, text=True, timeout=120)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assert_checkpoint_bindings()
-            self.assertEqual(sum(p.is_file() for p in self.home.rglob('*')), 12)
+            self.assertEqual(sum(p.is_file() for p in self.home.rglob('*')), 18)
             self.assertFalse((self.home / '.chief-of-staff').exists())
 
     def test_linked_destination_parents_refused_in_every_mode(self):
