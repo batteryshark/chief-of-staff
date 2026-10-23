@@ -46,6 +46,19 @@ Portable `tests/ordinary-call.test.mjs` uses synthetic child scripts and caller/
 spies. Explicit source integration imports actual pinned CLI/policy/backend and injects
 fake speech/APNs/native-origin interfaces: no real socket, credential, warm or phone call.
 
+### Existing-entry maintenance
+
+`./install.sh --ordinary-call-maintenance /absolute/chief --revision NAME --dry-run`
+preflights an already installed, exact receipt-owned entry. Omit `--dry-run` only
+in a coordinated chief-Location window: the atomic watched-entry replacement may
+reload that Location. It does not explicitly reload/restart or invoke a call.
+The reviewed `atLeast` helper retains its2.0.32 minimum; malformed, prerelease and
+older versions refuse registration. The bound runtime, CLI hash, current pointer,
+permissions, roles and private attempt directory are not rewritten. Unknown or
+modified ownership/dependencies refuse; each revision has a no-overwrite backup.
+There is no fresh enrollment or managed-call activation path. Registration proof
+must use current native registry/receipt reads, NEVER `chief_urgent_call` execution.
+
 ## Managed call adapter — deferred and production-unbound
 
 Owner correction, 22 Oct 2026: `managed-call-v1` was **never deployed**. Its reviewed

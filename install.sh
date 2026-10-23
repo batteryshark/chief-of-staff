@@ -11,6 +11,7 @@
 #   ./install.sh --shell-policy LOCATION [--dry-run] exclude only the unsafe shell wrapper in one Location
 #   ./install.sh --role-binding LOCATION [--dry-run] install own-memory/exact Knowledge-plan permissions only
 #   ./install.sh --role-fleet --docket-source PATH [--include-location PATH] [--dry-run] coordinated lead migration
+#   ./install.sh --ordinary-call-maintenance LOCATION --revision NAME [--dry-run] refresh only an existing owned entry
 #   ./install.sh --print <host>      print the rendered file(s) for a host
 #   ./install.sh --chief-permissions-only [--dry-run]  preserve prompt, repair chief edit rules
 #   ./install.sh --profile technical same legacy defaults (also the no-argument default)
@@ -31,6 +32,10 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ${1:-} == --ordinary-call-maintenance ]]; then
+  shift
+  exec python3 "$SRC/scripts/install-ordinary-call.py" "$@"
+fi
 if [[ ${1:-} == --role-fleet ]]; then
   shift
   exec python3 "$SRC/scripts/install-role-fleet.py" "$@"
