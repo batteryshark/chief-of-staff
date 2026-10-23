@@ -16,6 +16,18 @@ import tempfile
 from access_policy import agent_parts
 
 ROLES = frozenset(('chief', 'lead', 'writer', 'dispatcher'))
+
+
+def exposure_policy():
+    return json.loads((Path(__file__).resolve().parents[1] / 'services/role-policy.json').read_text())
+
+
+def exposure_denials(role):
+    """Preassembly catalog gates, distinct from resource access permissions."""
+    return [{'action': action, 'resource': '*', 'effect': 'deny'}
+            for action in exposure_policy().get(role, {}).get('denyActions', [])]
+
+
 # Official V2 /permissions actions; worktree_remove's declared edit action is
 # confirmed by the clean installed-2.1.3 finding. Do not infer other opencode IDs.
 NATIVE_ACTIONS = {name: name for name in (

@@ -1,19 +1,8 @@
 // managed by chief-of-staff/install.sh
 // Request-local diet: never grant permissions or replace agent/provider prompts.
-const common = ['read', 'glob', 'grep', 'patch', 'edit', 'write', 'skill', 'execute',
-  'question', 'webfetch', 'websearch', 'subagent', 'runway', 'openchamber',
-  'openchamber_knowledge', 'a2a_*', 'canvas_*', 'openchamber_render',
-  'opencode_list_mcp_resources', 'opencode_read_mcp_resource',
-  'opencode_session_move', 'opencode_session_rename', 'opencode_worktree_list',
-  'chief_post', 'chief_wait', 'chief_wait_time', 'chief_resume_time',
-  'docket_*'];
-export const tools = {
-  chief: [...common, 'shell', 'heartbeat_close', 'heartbeat_status', 'heartbeat_reconcile',
-    'openchamber_schedule', 'openchamber_web', 'nod_*', 'fleet_*', 'chief_call', 'chief_urgent_call'],
-  lead: [...common, 'shell', 'openchamber_web', 'fleet_*'],
-  writer: [...common, 'shell', 'openchamber_web', 'galley_*', 'gpt_image*', 'image_*'],
-  dispatcher: ['heartbeat_resolve'],
-};
+import {readFileSync} from 'node:fs';
+const policy = JSON.parse(readFileSync(new URL('./role-policy.json', import.meta.url), 'utf8'));
+export const tools = Object.fromEntries(Object.entries(policy).map(([role, value]) => [role, value.tools]));
 export const skills = {
   chief: ['checkpoint', 'reset-*', 'upstream-courtesy', 'shape', 'deep-research'],
   lead: ['checkpoint', 'reset-*', 'upstream-courtesy', 'shape', 'deep-research',

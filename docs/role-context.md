@@ -1,11 +1,43 @@
-# Per-role restrictions and direct-schema filtering
+# Effective management context
 
 The normal OpenCode installer installs `services/role-context.mjs` as the discovered
 `chief-role-context.js` plugin. It registers only a supported request-context hook:
-excluded direct tool schemas are removed; no permissions, systems, models, goals,
-MCP connections or plugin lifecycles are changed. Build/general/explore keep their
+excluded direct tool schemas are removed; the hook changes no permissions, systems, models, goals,
+MCP connections or plugin lifecycles. Build/general/explore keep their
 coding base and tools. Existing nonempty chief/lead agent bodies already replace
-the provider base; no second management-prompt mechanism is needed.
+the native provider base; no second native management-prompt mechanism is needed.
+
+`services/role-policy.json` is the canonical exact exposure policy. Normal role
+generation adds its declared-action denials to chief/lead permissions; rendering
+embeds the same tool lists into the installed JavaScript plugin, with no runtime
+JSON dependency. Role-level `execute` denial removes both the actual execute
+schema and Code Mode catalog before native instruction assembly. Deleting only
+the late hook's execute schema would leave the injected catalog behind.
+
+Chief/lead keep read/grep/glob, patch, shell, skill, OpenChamber, Knowledge, a2a,
+Runway and required direct chief/heartbeat tools. Patch is the observed harness's
+sole native editor: retaining it is the minimal functioning-editor exception,
+not permission to widen edits. Own-file/Plan grants and secret/foreign restrictions
+stay intact. Unused web, display, schedule and coding/delegation schemas are removed.
+Native edit/write registration alone is not evidence those tools reach this harness.
+
+Actual specialist Galley writers use custom agent IDs, an owner-generated nonempty
+author body and deny-all permissions with narrow edit/read/shell/contact exceptions.
+They already deny Code Mode and replace the native coding base. Leave their author
+skills/taste intact as a measured control; generic `writer` is not that inventory.
+Dispatcher is likewise an already-narrow resolve-only control. Build workers keep
+native coding context and tools.
+
+The Claude bridge 1.4.1 boundary is separate: ordinary requests retain the Claude
+Code SDK preset and append the supplied role instructions. No exposed supported
+custom systemPrompt setting replaces that preset. SDK builtin tools are already
+disabled with `tools: []`; forwarded request tools form its MCP surface. Shorter
+role bodies and tool filtering therefore trim effective context but do not remove
+the SDK preset. No cache patch, provider-global change or private prompt surgery.
+
+Acceptance requires fresh matched first-request usage and actual required-function
+checks per role. Source tests establish policy/rendering, not final runtime savings
+or later harness hook behavior. Keep baseline/AFTER measurement separate from counts.
 
 ## Install-time permission compiler
 
@@ -84,7 +116,8 @@ No per-agent server/plugin lifecycle mechanism is documented in official V2:
   at configuration/Location scope. Per-agent tool permission denies hide/deny tools
   **without disconnecting the server**. Documentation says server instructions are
   omitted if all its tools are denied (or Code Mode execute is denied). Evaluate actual
-  permission actions and instruction updates. Do not disable required Code Mode execute.
+  permission actions and instruction updates. Chief/lead required tools are direct;
+  their execute denial is intentional. Roles needing nested tools require separate review.
 - [Plugins](https://opencode.ai/v2/docs/plugins) configures plugin arrays and removal
   IDs at global/project scope. A plugin option named `agent` is plugin-specific input,
   not a generic per-agent lifecycle switch.

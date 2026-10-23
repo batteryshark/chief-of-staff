@@ -102,8 +102,8 @@ def render_role(template, role, brief):
         text = f'Read triggered reset-*.md files under `{directory}/`.\n' + text
     if template.startswith('hosts/codex'):
         if role == 'lead':
-            text = text.replace('Run in goal mode toward the whole approved outcome, not merely the current slice or dependency.',
-                                'Pursue the whole approved outcome across turns; Codex has no native goal mode.')
+            text = text.replace('Run in goal mode.',
+                                'Pursue the whole approved outcome across turns; Codex has no native goal mode.\n')
         budget(role, MARK + '\n' + text, brief)
         if "'''" in text:
             raise ValueError('unsafe TOML instruction embedding')

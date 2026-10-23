@@ -191,7 +191,11 @@ def desk_checkpoint(workflow, home, project):
 
 def render(template, brief, desk_project=None):
     if template == 'services/role-context.mjs':
-        return read(template) + '\n'
+        from role_context import exposure_policy
+        source = read(template).replace("import {readFileSync} from 'node:fs';\n", '')
+        return source.replace(
+            "const policy = JSON.parse(readFileSync(new URL('./role-policy.json', import.meta.url), 'utf8'));",
+            'const policy = ' + json.dumps(exposure_policy()) + ';') + '\n'
     if template.startswith('reset-procedure:'):
         from lean_roles import procedures
         return procedures(brief)[template.split(':', 1)[1]]

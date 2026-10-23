@@ -1,0 +1,11 @@
+{
+  "chief": {
+    "tools": ["read", "grep", "glob", "patch", "shell", "skill", "openchamber", "openchamber_knowledge", "a2a_create", "a2a_list", "a2a_read", "a2a_send", "runway", "chief_post", "chief_wait", "chief_wait_time", "chief_resume_time", "chief_call", "chief_urgent_call", "heartbeat_close", "heartbeat_status", "heartbeat_reconcile"],
+    "denyActions": ["execute", "subagent", "question", "webfetch", "websearch"]
+  },
+  "lead": {
+    "tools": ["read", "grep", "glob", "patch", "shell", "skill", "openchamber", "openchamber_knowledge", "a2a_create", "a2a_list", "a2a_read", "a2a_send", "runway", "chief_post", "chief_wait", "chief_wait_time", "chief_resume_time", "docket_milestone"],
+    "denyActions": ["execute", "subagent", "question", "webfetch", "websearch"]
+  },
+  "dispatcher": {"tools": ["heartbeat_resolve"], "denyActions": []}
+}

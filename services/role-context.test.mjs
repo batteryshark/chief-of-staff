@@ -11,11 +11,11 @@ test('normal installer uses discovered native JavaScript plugin entry', () => {
 });
 
 test('request diet preserves execution, memory, plans and dispatch; workers unchanged', () => {
-  for (const agent of ['chief-of-staff', 'lead', 'writer']) {
+  for (const agent of ['chief-of-staff', 'lead']) {
     const event = {agent, tools: Object.fromEntries(['read','patch','execute','opencode_session_move',
       'openchamber','openchamber_knowledge','runway','a2a_send','unrelated_tool'].map(id => [id, {}]))};
     filterTools(event);
-    assert.equal(Object.keys(event.tools).length, 8);
+    assert.deepEqual(Object.keys(event.tools), ['read','patch','openchamber','openchamber_knowledge','runway','a2a_send']);
     assert.ok(!event.tools.unrelated_tool);
   }
   const event = {agent: 'build', tools: {unrelated_tool: {}}};
@@ -30,6 +30,23 @@ test('dispatcher is resolve-only and patterns are anchored/literal', () => {
   assert.ok(!matches('xreset-dispatch', ['reset-*']));
   assert.ok(!matches('axb', ['a.b']));
 });
+test('management keeps required capabilities and custom writer/workers are controls', () => {
+  const required = ['read','glob','grep','patch','shell','skill','openchamber',
+    'openchamber_knowledge','a2a_create','a2a_list','a2a_read','a2a_send','runway',
+    'chief_post','chief_wait','chief_wait_time','chief_resume_time'];
+  const extras = ['execute','subagent','task','todo','lsp','canvas_show','openchamber_render',
+    'webfetch','websearch','openchamber_web','openchamber_schedule'];
+  for (const agent of ['lead','chief-of-staff']) {
+    const event = {agent, tools: Object.fromEntries([...required,...extras].map(id => [id, {}]))};
+    filterTools(event);
+    assert.deepEqual(Object.keys(event.tools), required);
+  }
+  for (const agent of ['build','general','explore','galley-writer-example','writer']) {
+    const event = {agent, tools: {execute:{}, patch:{}, specialist:{}}};
+    filterTools(event);
+    assert.deepEqual(Object.keys(event.tools), ['execute','patch','specialist']);
+  }
+});
 test('setup only hooks direct schemas; no early registry reads or permission mutations', async () => {
   let disposed = 0;
   let hook;
@@ -40,7 +57,7 @@ test('setup only hooks direct schemas; no early registry reads or permission mut
     }},
   });
   const lead = {agent:'lead', tools:{execute:{}, openchamber_schedule:{}}};
-  hook(lead); assert.deepEqual(Object.keys(lead.tools), ['execute']);
+  hook(lead); assert.deepEqual(Object.keys(lead.tools), []);
   const writer = {agent:'writer', tools:{actual_writer_dependency:{}}};
   hook(writer); assert.ok(writer.tools.actual_writer_dependency);
   await cleanup(); assert.equal(disposed, 1);

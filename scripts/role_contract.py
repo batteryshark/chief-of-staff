@@ -139,7 +139,8 @@ def permissions(role, home, brief, location=None, plans=(), project_docs=()):
             rules.append(rule('read', resource))
     for command in ('rm *', 'git push*', 'git reset*', 'git clean*', 'orchestra-next merge*'):
         rules.append(rule('shell', command, 'ask'))
-    return rules + secret_rules(home)
+    from role_context import exposure_denials
+    return rules + exposure_denials(role) + secret_rules(home)
 
 
 def knowledge_plans(location, home):
