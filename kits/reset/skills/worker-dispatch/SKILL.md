@@ -6,22 +6,16 @@ description: Start or continue bounded chief/lead work with quota routing and ne
 
 Read current ~/.chief-of-staff/models.md, project permissions and Runway usage before new work.
 Use the operator-authorized providers and routes; no private account/model preference is supplied.
-Choose capability, then observed usage/reset. Spend expiring allowances on useful authorized
-work, never invent jobs or capacity, buy credits or redeem resets.
+Choose capability, then usage/reset; spend expiring allowances only on authorized work, never buy credits or redeem resets.
 Reuse the kit's routing/WORKFLOW.md for prepare, dispatch, bind and reconcile/finish.
-A refusal is not permission to evade quota, permissions or writer isolation. Use the documented
-manual fallback only after resolving the reason and recording the authorized exception.
+A refusal cannot bypass quota, permissions or writer isolation; resolve its reason and record authorized manual exceptions.
 
 ## Selectable model aliases
 
-Search native model aliases with `all:true`; preserve the returned selectable ID.
-Fast/Ultrafast share the existing OpenAI pool/windows/cap, not extra capacity.
-Honor Runway `unavailable_transports` markers: the current OpenChamber create/send
-validator requires the ID repair before these routes can be admitted. Nested
-creation alone does not repair the later session.send call. Do not normalize an
-alias to underlying `modelID` or improvise a transport to bypass admission.
-Parent-model inheritance is not per-worker selection proof. Require exact selected
-provider/model/variant readback for any enabled picker-offered model once repaired.
+Search model aliases with `all:true`; preserve selectable ID and variant, not the underlying modelID.
+Honor Runway `unavailable_transports`; catalog visibility alone does not clear a transport block.
+Fast/Ultrafast share existing OpenAI capacity. Inheritance is not explicit model selection.
+Use high effort for design/diagnosis, medium for building/checking within authorized routes.
 
 ## Lead workers
 
@@ -36,28 +30,33 @@ Use headless/offscreen work, cap heavy jobs and bound process creation. Stop onl
 identified owned runaway jobs, never broad pattern kills; report shared-host safety trouble.
 Change a running worker's route/scope only at a safe checkpoint, not by killing its work.
 
-Brief outcome, completion criteria, project/checkout paths, authority/holds, protected resources,
-relevant failures, proportionate checks, changed paths, uncertainty and pending commands/effects.
-Include the two-try rule and 30–45 minute simplest-route checkpoint, plus:
-“Stay in this project folder; don't move this session into a worktree unless I ask.”
-End with the actual parent's question route:
-“If you need a decision or information, don't guess and don't use the built-in question prompt.
-Send your question to session <parent> with openchamber session.send, returnResult true,
-then continue with its answer. If PENDING, end your turn; the answer arrives later.”
+Use an approximately 15-line brief, replacing placeholders with the actual assignment:
+1. Outcome and completion criteria.
+2. Project folder; assigned source checkout (tools use this checkout).
+3. Owned paths and other owners' protected paths.
+4. Existing decisions, holds and relevant failed approaches.
+5. Decide, log and move within this authority; never bypass permissions.
+6. Delegate denied project edits to an authorized worker through the parent.
+7. Reversible own-setup work: relevant existing tests.
+8. Shared live changes: one actual check and a rollback path.
+9. Public, destructive or money effects: applicable approval required.
+10. Heavy verification once at milestone end, not each step.
+11. High effort for design/diagnosis; medium for building/checking.
+12. After two failures change approach; after 30–45 minutes reassess the simplest route.
+13. Stay in the project folder; do not move the session unless asked.
+14. Report usable now / left first, then changed paths, checks and pending effects.
+15. Questions/results: session.send to <parent>, returnResult:true; if pending, end the turn.
 
 Answer worker questions yourself; escalate only genuinely new authority or chief/principal choices.
-Relay later answers to the original worker. Check actual results/state/effects before finish;
-ambiguous creation is uncertain, not unsent. Never replay effects blindly. Wait by ending the
-turn, not sleeping/polling. Keep running work intact until a safe checkpoint, then recover
-the same job with its objective, paths, changes and pending effects preserved.
+Relay answers to the original worker; reconcile results and pending effects before finish.
+Ambiguous creation is uncertain, not unsent; never blindly replay it. End turns rather than poll.
+Recover checkpointed work with its objective, paths, changes and pending effects preserved.
 
 ## Chief actions
 
-Start persistent project-root leads with the approved whole goal/handover, lead agent and goal
-mode, without automatic returns into the conversation. Restart an unchanged stopped goal with
-the supported goal restart and Goal: plus its full objective; never bypass a hold.
+Start project-root leads with the whole approved goal/handover, lead agent and goal mode, without automatic returns.
+Restart unchanged stopped goals with supported restart and Goal: plus the full objective; never bypass a hold.
 Only the chief starts, re-goals or parks leads. Dispatch may restart an unchanged stalled goal
 under standing authority, never parked/twice-rejected work. For work belonging to no project,
-the chief may dispatch a bounded worker through Runway; request a return only if needed to
-continue, otherwise use the quiet reporting route. Do not manage an existing lead's workers.
+the chief may dispatch through Runway; request returns only when needed, otherwise report quietly. Do not manage a lead's workers.
 Archive sessions; never delete a parent or its children.

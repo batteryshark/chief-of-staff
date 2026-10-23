@@ -18,6 +18,26 @@ spec.loader.exec_module(pilot)
 
 
 class LeanInstall(unittest.TestCase):
+    def test_streamlined_operating_policy_and_brief_budget(self):
+        paths = ('kits/reset/chief.md', 'kits/reset/lead.md',
+                 'kits/reset/skills/worker-dispatch/SKILL.md', 'routing/WORKFLOW.md')
+        bodies = [(ROOT / path).read_text() for path in paths]
+        self.assertLessEqual(sum(len(body.splitlines()) for body in bodies), 351)
+        for body, limit in zip(bodies[:2], (104, 68)):
+            self.assertLessEqual(len(body.splitlines()), limit)
+            for phrase in ('usable now / left', 'design/diagnosis', 'building/checking',
+                           'milestone end', 'rollback', 'authorized worker'):
+                self.assertIn(phrase, body)
+            self.assertIn('approval', body)
+        brief = bodies[2].split('Use an approximately 15-line brief,', 1)[1].split('\n\n', 1)[0]
+        items = re.findall(r'^(\d+)\. (.+)$', brief, re.M)
+        self.assertEqual([int(n) for n, _ in items], list(range(1, 16)))
+        self.assertIn('session.send to <parent>, returnResult:true; if pending, end the turn', brief)
+        self.assertIn('Shared live changes: one actual check and a rollback path', brief)
+        self.assertIn('never bypass permissions', brief)
+        self.assertIn('unavailable_transports', bodies[2])
+        self.assertIn('Archive sessions; never delete a parent or its children', bodies[2])
+
     def test_reporting_milestone_guidance_is_explicit_load_only_and_permission_safe(self):
         procedure = lean.procedures('/brief')['reset-reporting']
         for text in ('milestone_at', 'milestone_ref', 'LEAD_CHECKINS.md', 'do not retest',

@@ -144,6 +144,7 @@ targets() {
   case "$1" in
     opencode) echo "hosts/opencode.md|$HOME/.config/opencode/agents/chief-of-staff.md|"
               echo "hosts/opencode-lead.md|$HOME/.config/opencode/agents/lead.md|"
+              echo "services/role-context.mjs|$HOME/.config/opencode/plugins/chief-role-context.js|"
               echo "$WF/opencode-command.md|$HOME/.config/opencode/commands/shape.md|"
                echo "$CP/opencode-command.md|$HOME/.config/opencode/commands/checkpoint.md|"
                echo "skills/upstream-courtesy/SKILL.md|$HOME/.config/opencode/skills/upstream-courtesy/SKILL.md|$HOME/.config/opencode/skills/upstream-courtesy" ;;

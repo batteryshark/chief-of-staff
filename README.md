@@ -33,6 +33,16 @@ The separate [lead-kit](https://github.com/batteryshark/lead-kit) is for one acc
 
 ## Requirements
 
+### Role restrictions and catalog limits
+
+The OpenCode installer includes request-local direct-schema filtering. Reviewed
+install-time inventories can also compile additive tool/skill denies, preserving
+existing permissions. These are restrictions, not generic per-agent MCP/plugin
+unloading: shared providers remain enabled. Stale nested-tool and skill advertising
+is a known host gap; no full catalog diet, verified denied execution or token savings
+is claimed. New catalog entries require reviewed inventory and normal reinstall.
+See [role-context scope and limitations](docs/role-context.md).
+
 Basic rendering and installation use Bash and Python 3.10+ with the standard library. Install your host application separately, with an available model and the tools/permissions your workflow needs. Instruction files don't supply model access or credentials.
 
 OpenCode/OpenChamber is the runtime integration target for session dispatch, goal mode and scoped permissions. Claude Code receives agent/output-style/skill files; its session workflow needs the optional `chief-openchamber` helper and an installed macOS OpenChamber app. Codex receives instruction fragments and skills: connect the fragments using your Codex version's supported configuration. These hosts don't have equivalent runtime capabilities.

@@ -11,6 +11,9 @@ compact JSON: the choice, the exact dispatch `args`, and one line per alternativ
 
 ## New work
 
+Use high effort for design/diagnosis, medium for building/checking within authorized routes; no global route changes. Use the approximately 15-line brief in `reset-worker-dispatch`. Reports begin usable now / left; decide, log and move within authority. Delegate denied project edits to an authorized worker, never bypass permissions.
+Reversible own-setup work uses existing tests; shared live changes need one actual check and rollback. Public, destructive or money effects need applicable approval. Heavy verification once at milestone end. Two failures: change approach; after 30–45 minutes reassess the simplest route.
+
 1. Give each authorized job a stable short `job` id. Set `category` to `trivial`, `research`, `implement`, or `hard`, `size` to `small`, `medium`, or `large`, and `directory` to the native worker session/project directory. Optional `checkout` names the source worktree when it differs. Omit it to keep the existing directory-as-work-location behavior (including non-repository directories). Explicit checkout paths are canonicalized and must be existing registered worktree roots in the same Git repository as `directory`; foreign repositories and arbitrary subdirectories are refused. Use a separate existing worktree for each concurrent writer. `writer:false` is only for read-only work, not a way to bypass writer conflicts. Keep the task's category and capability requirements honest.
 2. Call `plan` for a preview or `prepare` to reserve dispatch. Example request:
 
@@ -84,20 +87,12 @@ not a deleted source worktree; checkpoint, continuation and bind still revalidat
 
 Reservations are fixed percentage heuristics (small 1, medium 3, large 8 points per applicable window), not token estimates. Dispatch bounded slices and reassess at checkpoints. External sessions can consume quota between samples; concurrency limits and reserves reduce risk but cannot guarantee completion. Remote routing and paid API balances are deliberately not admitted by this version. Configure a local registry on each account-owning host before extending remote dispatch.
 
-Fast/Ultrafast surge routes retain the existing source, pool, windows and cap.
-`unavailable_transports:["openchamber"]` blocks admission on the current create/send
-transport until its selectable-ID validation repair is installed and verified. Do not
-remove that marker on catalog visibility alone. Preserve the requested selectable
-`id` through dispatch; never normalize it to the underlying catalog `modelID`.
-Native model-tool searches for aliases need `all:true`; Runway already reads the
-full `/api/model` catalog. Native subagent admission/inherited parent models are
-not explicit per-worker model-selection proof; these routes add no alternate transport.
-Project surge limits (for example six lanes) remain additional constraints, even
-when the existing source-wide cap is higher. No reset or new capacity is assumed.
-Acceptance requires explicit selection of ANY enabled picker-offered worker model,
-not only these example aliases, with provider/variant validation and actual selected-ID
-readback through the repaired supported create/send path. Never normalize to a base ID
-or count parent inheritance as selection. No additional model probe is implied here.
+Fast/Ultrafast retain existing source/pool/windows/cap and any tighter project surge limit.
+`unavailable_transports:["openchamber"]` blocks create/send admission until the ID repair is verified;
+catalog visibility alone cannot clear it. Preserve selectable `id`, never underlying `modelID`.
+Search aliases with `all:true`; Runway reads the full `/api/model` catalog. No alternate transport or new capacity is implied.
+At milestone acceptance, verify explicit selectable-ID/provider/variant readback on the supported path;
+parent inheritance is not selection. Do not repeat model probes for each worker.
 
 ## Origin-bound native dispatch (explicitly policy-bound plugin only)
 

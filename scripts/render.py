@@ -190,6 +190,8 @@ def desk_checkpoint(workflow, home, project):
 
 
 def render(template, brief, desk_project=None):
+    if template == 'services/role-context.mjs':
+        return read(template) + '\n'
     if template.startswith('reset-procedure:'):
         from lean_roles import procedures
         return procedures(brief)[template.split(':', 1)[1]]

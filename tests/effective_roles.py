@@ -45,6 +45,7 @@ def assert_current_exports(test, actual, source, home, brief):
     targets = {
         '.config/opencode/agents/chief-of-staff.md':'hosts/opencode.md',
         '.config/opencode/agents/lead.md':'hosts/opencode-lead.md',
+        '.config/opencode/plugins/chief-role-context.js':'services/role-context.mjs',
         '.config/opencode/commands/shape.md':'workflows/shape/hosts/opencode-command.md',
         '.config/opencode/commands/checkpoint.md':'workflows/checkpoint/hosts/opencode-command.md',
         '.claude/output-styles/chief-of-staff.md':'hosts/claude-output-style.md',

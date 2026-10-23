@@ -46,7 +46,7 @@ class InstallTest(unittest.TestCase):
         self.assertIn('\n# Chief\n', chief)
         self.assertIn('reset-worker-dispatch', chief)
         worker = self.e.home / '.config/opencode/skills/reset-worker-dispatch/SKILL.md'
-        self.assertIn('approved whole goal/handover, lead agent', worker.read_text())
+        self.assertIn('whole approved goal/handover, lead agent', worker.read_text())
 
     def test_visual_preview_guidance_renders_for_chief_and_lead(self):
         code, out = self.e.install('opencode', 'claude', 'codex')

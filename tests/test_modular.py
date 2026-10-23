@@ -53,7 +53,8 @@ class ModularTests(unittest.TestCase):
         self.assertEqual(len(names), len(set(names)))
         from service_resources import resource_paths
         guides = resource_paths(self.home / '.chief-of-staff')
-        self.assertEqual(len(names), 18 + len(guides))  # same role/procedure leaves plus public guides
+        self.assertEqual(len(names), 19 + len(guides))  # role/procedure leaves, context plugin and public guides
+        self.assertIn(str(self.home / '.config/opencode/plugins/chief-role-context.js'), names)
         for guide in guides:
             self.assertIn(str(guide), names)
         actual = {chunk.split('\n', 1)[0]: chunk.split('\n', 1)[1].rstrip() for chunk in chunks}
