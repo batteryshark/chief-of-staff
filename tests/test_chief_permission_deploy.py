@@ -17,6 +17,35 @@ spec.loader.exec_module(deploy)
 
 
 class ChiefPermissions(unittest.TestCase):
+    def test_explicit_revision_preserves_old_archive_and_fixed_local_body(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home=Path(tmp).resolve();brief=home/'brief';brief.mkdir()
+            target=brief/'.opencode/agents/chief-of-staff.md';target.parent.mkdir(parents=True)
+            rules=[dict(action='edit',resource='*',effect='deny'),dict(action='edit',resource=str(brief/'research/private.md'),effect='deny')]
+            before='---\n'+json.dumps({'mode':'primary','model':'keep','permissions':rules})+'\n---\n<!-- managed by chief-of-staff/install.sh; lean role -->\nExact body.\n'
+            target.write_text(before);other=target.with_name('lead.md');other.write_text('foreign role')
+            old=brief/'archive/reset-20261022-permission/chief-of-staff.md';old.parent.mkdir(parents=True);old.write_text('preserve original archive')
+            deploy.deploy(brief,home,revision='final-1',local=True,dry=True)
+            self.assertEqual(target.read_text(),before)
+            deploy.deploy(brief,home,revision='final-1',local=True)
+            after=target.read_text();self.assertEqual(agent_parts(after)[1],agent_parts(before)[1])
+            self.assertEqual(agent_parts(after)[3]['model'],'keep')
+            self.assertEqual(winner('edit',str(brief/'research/private.md'),agent_parts(after)[2])['effect'],'deny')
+            self.assertEqual(winner('edit',str(brief/'research/private.key'),agent_parts(after)[2])['effect'],'deny')
+            backup=brief/'archive/reset-final-1-permission/chief-of-staff.local.md'
+            self.assertEqual(backup.read_text(),before);self.assertEqual(old.read_text(),'preserve original archive')
+            self.assertEqual(other.read_text(),'foreign role')
+            self.assertTrue(deploy.deploy(brief,home,revision='final-1',local=True).startswith('same'))
+            target.write_text(before)
+            with self.assertRaisesRegex(ValueError,'archive collision'):deploy.deploy(brief,home,revision='final-1',local=True)
+            self.assertEqual(target.read_text(),before)
+            for revision in ('','..','../escape','/absolute','a/b','a\\b','a\nnext'):
+                with self.assertRaisesRegex(ValueError,'safe nonempty basename'):deploy.deploy(brief,home,revision=revision,local=True)
+                self.assertEqual(target.read_text(),before)
+            # The default archive collision is still a refusal, not an auto-renamed backup.
+            global_role=home/'.config/opencode/agents/chief-of-staff.md';global_role.parent.mkdir(parents=True);global_role.write_text(before)
+            with self.assertRaisesRegex(ValueError,'archive collision'):deploy.deploy(brief,home)
+
     def test_installer_flag_order_and_other_modes_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp).resolve()

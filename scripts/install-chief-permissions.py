@@ -2,6 +2,7 @@
 """Permission-only managed chief deployment. No prompt, lead, seed or config writes."""
 import argparse
 import json
+import re
 from pathlib import Path
 import tempfile
 
@@ -36,13 +37,18 @@ def repaired(current, brief):
     return '---\n' + header.rstrip('\n') + '\n---\n' + body
 
 
-def deploy(brief, home, dry=False):
+def deploy(brief, home, dry=False, revision=None, local=False):
     brief, home = Path(brief).resolve(), Path(home).resolve()
-    target = home / '.config/opencode/agents/chief-of-staff.md'
-    backup = brief / 'archive/reset-20261022-permission/chief-of-staff.md'
+    if revision is not None and (not isinstance(revision, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}', revision)):
+        raise ValueError('revision must be a safe nonempty basename without separators or traversal')
+    target = (brief / '.opencode/agents/chief-of-staff.md') if local else home / '.config/opencode/agents/chief-of-staff.md'
+    folder = 'reset-' + revision + '-permission' if revision is not None else 'reset-20261022-permission'
+    backup = brief / 'archive' / folder / ('chief-of-staff.local.md' if local else 'chief-of-staff.md')
     DestinationRoot(home).validate_all([target])
     DestinationRoot(brief).validate_all([backup])
     before = target.read_text()
+    if local and '; lean role' not in agent_parts(before)[1]:
+        raise ValueError('fixed local target must be the managed canonical lean chief')
     after = repaired(before, str(brief))
     if before == after:
         return 'same ' + str(target)
@@ -70,5 +76,7 @@ if __name__ == '__main__':
     parser.add_argument('brief')
     parser.add_argument('home')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--revision', help='explicit immutable backup revision; default collision behavior is unchanged')
+    parser.add_argument('--local', action='store_true', help='repair only the fixed installed canonical local chief metadata')
     args = parser.parse_args()
-    print(deploy(args.brief, args.home, args.dry_run))
+    print(deploy(args.brief, args.home, args.dry_run, args.revision, args.local))

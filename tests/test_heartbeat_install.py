@@ -52,6 +52,8 @@ class HeartbeatInstall(unittest.TestCase):
                 paths = {p:text for p,text in planned.items() if '/skills/' not in str(p) and '/agents/' not in str(p)}
                 for p,text in paths.items():
                     p.parent.mkdir(parents=True,exist_ok=True); p.write_text(text)
+                skill=origin/'.opencode/skills/reset-worktree-safety/SKILL.md';skill.parent.mkdir(parents=True)
+                skill.write_text('prior receipt-owned procedure\n');paths[skill]=skill.read_text()
                 bus = home / '.local/share/chief-of-staff/heartbeat/bus.mjs'
                 bus.write_text('// prior owned runtime\n')
                 receipt = chief / 'archive/reset-fixture/install-owned.json'; receipt.parent.mkdir(parents=True)
@@ -60,6 +62,8 @@ class HeartbeatInstall(unittest.TestCase):
                 installer.run(config, 'maintenance')
                 self.assertEqual(options.read_bytes(),before)
                 self.assertEqual(bus.read_bytes(),(ROOT/'heartbeat/bus.mjs').read_bytes())
+                self.assertEqual(skill.read_text(),installer.procedures(str(chief))['reset-worktree-safety'])
+                self.assertFalse((origin/'.opencode/skills/reset-shape').exists())
                 wrapper = (origin/'.opencode/plugins/chief-heartbeat-pilot.js').read_text()
                 self.assertIn('options.reconciliationRequired = true',wrapper)
                 self.assertIn(str(home/'.docket/lead-checkins.jsonl'),wrapper)
@@ -68,6 +72,15 @@ class HeartbeatInstall(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'topology'): installer.run(changed,'maintenance')
                 bus.write_text('// unrelated change\n')
                 with self.assertRaisesRegex(ValueError,'preserve/reconcile'): installer.run(config,'maintenance')
+                bus.write_text((ROOT/'heartbeat/bus.mjs').read_text())
+                skill.write_text('independent local procedure edit\n')
+                with self.assertRaisesRegex(ValueError,'preserve/reconcile'):installer.run(config,'maintenance')
+                self.assertEqual(skill.read_text(),'independent local procedure edit\n')
+                skill.write_text(installer.procedures(str(chief))['reset-worktree-safety'])
+                unowned=origin/'.opencode/skills/reset-reporting/SKILL.md';unowned.parent.mkdir(parents=True);unowned.write_text('unowned local instructions')
+                with self.assertRaisesRegex(ValueError,'unowned local procedure'):installer.run(config,'maintenance')
+                self.assertEqual(unowned.read_text(),'unowned local instructions')
+                self.assertEqual(options.read_bytes(),before)
 
     def test_iphone_profile_is_incremental_post_only_without_expanding_policy_records(self):
         # Synthetic incremental manifests preserve the topology assertions without

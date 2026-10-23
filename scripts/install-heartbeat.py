@@ -216,15 +216,25 @@ def maintain(config, dry=False):
         wrapper = wrapper.replace("const status = {", "// Installer-owned maintenance bindings; saved options remain byte-identical.\n    options.rosterFile ??= " + json.dumps(roster) + ";\n    options.reconciliationRequired = true;\n    const status = {")
         wrapper += '\n// maintenance options sha256: ' + sha256(raw) + '\n'
         files[target] = wrapper
+        # Existing local procedures override global copies. Refresh only exact
+        # receipt-owned existing exports; never enroll a missing local skill.
+        for ident, text in procedures(str(chief)).items():
+            procedure = directory / '.opencode/skills' / ident / 'SKILL.md'
+            if procedure.exists() and procedure.read_text() != text:
+                if not owned.get(str(procedure)):
+                    raise ValueError('unowned local procedure; preserve: ' + str(procedure))
+                files[procedure] = text
     DestinationRoot(home).validate_all(files)
+    observed = {}
     for target, text in files.items():
-        if target.exists() and target.read_text() != text and sha256(target.read_bytes()) not in owned.get(str(target), set()):
+        observed[target] = target.read_bytes() if target.exists() else None
+        if observed[target] is not None and observed[target] != text.encode() and sha256(observed[target]) not in owned.get(str(target), set()):
             raise ValueError('owned runtime changed; preserve/reconcile: ' + str(target))
     if dry:
         print('\n'.join(str(p) for p in files)); return
     receipt = chief / 'archive/reset-runtime-maintenance' / ('install-' + str(time.time_ns()) + '.json')
     DestinationRoot(home).validate_all([receipt])
-    before = {str(p): {'text': p.read_text(), 'mode': p.stat().st_mode & 0o777} if p.exists() else None for p in files}
+    before = {str(p): {'text': observed[p].decode(), 'mode': p.stat().st_mode & 0o777} if observed[p] is not None else None for p in files}
     receipt.parent.mkdir(parents=True, exist_ok=True)
     with receipt.open('x') as out:
         json.dump({'phase': 'maintenance', 'optionsSha256': sha256(raw), 'before': before,
@@ -232,7 +242,9 @@ def maintain(config, dry=False):
     if options_path.read_bytes() != raw:
         raise ValueError('owner options changed during preflight; no runtime writes')
     for target, text in sorted(files.items(), key=lambda pair: pair[0].parent.name == 'plugins'):
-        if target.exists() and target.read_text() == text: continue
+        current = target.read_bytes() if target.exists() else None
+        if current != observed[target]: raise ValueError('owned export changed after preflight; preserve: ' + str(target))
+        if current == text.encode(): continue
         target.parent.mkdir(parents=True, exist_ok=True); target.write_text(text)
     if options_path.read_bytes() != raw:
         raise ValueError('owner options changed concurrently; inspect, never restore blindly')
