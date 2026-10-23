@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "PYTHONPATH=scripts:tests python3 -B -m unittest test_pi test_packaging test_desk_rules.BoundedRulesTests test_optional_filing.FilingTests test_filing_review_fixes.PolicyReviewTests test_modular.ModularTests.test_principal_standalone_install_all_hosts_without_chief test_modular.ModularTests.test_authorized_levels_and_docket_reach_both_prompts test_modular.ModularTests.test_config_errors_fail_before_writes",
+    "test": "PYTHONPATH=scripts:tests python3 -B -m unittest test_pi test_packaging test_optional_filing.FilingTests test_filing_review_fixes.PolicyReviewTests test_modular.ModularTests.test_principal_standalone_install_all_hosts_without_chief test_modular.ModularTests.test_authorized_levels_and_docket_reach_both_prompts test_modular.ModularTests.test_config_errors_fail_before_writes",
     "test:development": "python3 -B -m unittest discover -s tests -q && node --test tests/*.test.mjs",
     "test:native": "node scripts/test-runtime.mjs"
   },

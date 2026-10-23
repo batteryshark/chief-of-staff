@@ -13,18 +13,20 @@ flowchart TD
   C <--> L2[Project lead: plan and verification]
   L1 <--> W1[Bounded workers]
   L2 <--> W2[Bounded workers]
-  L1 -. optional reporting route .-> D[Desk: receipts and progress projections]
-  D -. escalations .-> C
 ```
 
-The principal sets authority and approves plans before implementation. Chief coordinates outcomes; leads decide technical details within the agreed scope. Workers ask their lead when blocked. The optional desk files reports and prepares progress updates; it has no independent approval authority. [Roles](ROLES.md) covers the reporting boundaries.
+The principal sets authority and approves plans before implementation. Chief coordinates outcomes; leads decide technical details within the agreed scope. Workers ask their lead when blocked. The filing desk/native adapter is retired, not an active reporting route. [Roles](ROLES.md) covers the reporting boundaries.
 
 ## What ships
 
 - Chief and lead instruction templates for OpenCode/OpenChamber, Claude Code, Codex and Pi 1.0.
 - `shape` for agreeing a project's purpose and scope; `checkpoint` for durable state and handover.
 - Engineering and research lead practices, plus an on-demand upstream-courtesy skill that requires approval before posting.
-- Optional scoped OpenCode profiles, desk modules and quota-aware Runway routing.
+- Optional scoped OpenCode profiles and quota-aware Runway routing.
+
+This hygiene-only update removes retired desk implementation/tests. It does not
+include the parallel private-source runtime repairs or claim live enrollment.
+See [publication boundaries](docs/publication/README.md).
 
 The separate [lead-kit](https://github.com/batteryshark/lead-kit) is for one accountable project lead without a Chief. This repository includes the current lead core in `kits/lead/` and can also render a standalone lead. Chief adds cross-project coordination, principal-facing conversation, memory and shaping.
 
@@ -32,17 +34,19 @@ The separate [lead-kit](https://github.com/batteryshark/lead-kit) is for one acc
 
 Basic rendering and installation use Bash and Python 3.10+ with the standard library. Install your host application separately, with an available model and the tools/permissions your workflow needs. Instruction files don't supply model access or credentials.
 
-OpenCode/OpenChamber is the runtime integration target for session dispatch, goal mode, scoped permissions and native desk adapters. Claude Code receives agent/output-style/skill files; its session workflow needs the optional `chief-openchamber` helper and an installed macOS OpenChamber app. Codex receives instruction fragments and skills: connect the fragments using your Codex version's supported configuration. These hosts don't have equivalent runtime capabilities.
+OpenCode/OpenChamber is the runtime integration target for session dispatch, goal mode and scoped permissions. Claude Code receives agent/output-style/skill files; its session workflow needs the optional `chief-openchamber` helper and an installed macOS OpenChamber app. Codex receives instruction fragments and skills: connect the fragments using your Codex version's supported configuration. These hosts don't have equivalent runtime capabilities.
 
-Pi 1.0 uses prompt templates and skills in `~/.pi/agent`. It needs Node.js 22.19.0+ and a separately configured model. Optional Pi packages add delegation and goal tracking; Chief's durable external-session dispatch and desk adapters remain OpenCode/OpenChamber integrations. See [Pi setup](docs/pi.md) for pinned prerequisites and the supported handover paths.
+Pi 1.0 uses prompt templates and skills in `~/.pi/agent`. It needs Node.js 22.19.0+ and a separately configured model. Optional Pi packages add delegation and goal tracking; Chief's durable external-session dispatch remains an OpenCode/OpenChamber integration. See [Pi setup](docs/pi.md) for pinned prerequisites and the supported handover paths.
 
 Voice needs a separately configured voice integration. Fleet, Docket, Tarmac, Voicestack and a2a are external services or plugins. The kit doesn't provision them, accounts or background services. See [shared services](services/README.md).
 
 ## Setup
 
-From a checked-out copy, inspect the output first:
+Clone the public kit, then inspect the output first:
 
 ```sh
+git clone https://github.com/batteryshark/chief-of-staff.git
+cd chief-of-staff
 ./install.sh --print opencode
 ./install.sh --dry-run opencode
 ./install.sh opencode
@@ -107,7 +111,9 @@ This downloads dependencies and adds a local OpenCode plugin/settings entry. Rev
 
 Scoped profiles create separate local OpenCode bundles. They require an explicitly supplied a2a module and operator bindings for goal-mode calls. Host permission filters aren't a security sandbox. See [scoped configuration](kits/README.md#scoped-profiles).
 
-The desk includes durable receipts, report routing, bounded decision rules, a native host adapter and an opt-in filing-only receiver. Filing-only mode prepares status/digest updates and forwards questions to Chief; it doesn't answer them. Native actions need authenticated host bindings and explicit activation. Classifier schemas can't establish semantic reliability. Start with the [desk guide](kits/README.md#optional-desk), [filing receiver](kits/chief/desk/filing/README.md) and [native contract](hosts/desk-native/CONTRACT.md); basic installation enables none of these routes.
+The filing desk/native adapter is retired. Remaining historical desk guides,
+filing-only code and installers are not a supported activation path. Use ordinary
+lead-owned status instead; no live enrollment is shipped by this update.
 
 ## Source and checks
 
@@ -117,7 +123,7 @@ For the bounded offline release checks, use Python 3.10+ and a disposable HOME/T
 
 ```sh
 PYTHONPATH=scripts:tests python3 -B -m unittest \
-  test_desk_rules.BoundedRulesTests test_optional_filing.FilingTests \
+  test_optional_filing.FilingTests \
   test_modular.ModularTests.test_principal_standalone_install_all_hosts_without_chief
 ```
 
