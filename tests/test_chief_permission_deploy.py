@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -128,3 +129,135 @@ class ChiefPermissions(unittest.TestCase):
             with self.assertRaises(ValueError):
                 deploy.deploy(home, home)
             self.assertEqual(other.read_text(), 'original')
+
+
+class ChiefBodyOnly(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        self.home = Path(tmp.name).resolve(); self.brief = self.home / '.chief-of-staff'
+        self.brief.mkdir()
+        self.global_target = self.home / '.config/opencode/agents/chief-of-staff.md'
+        self.local_target = self.brief / '.opencode/agents/chief-of-staff.md'
+        for target in (self.global_target, self.local_target):
+            target.parent.mkdir(parents=True)
+        self.header = (b'---\n# exact custom metadata, spacing and order\nmode: primary\nmodel: keep/provider\n'
+                       b'color: "#abc123"\ncustom: {nested: [one, two]}\npermissions: '
+                       b'[{"action":"edit","resource":"*","effect":"deny"},'
+                       b'{"action":"edit","resource":"/private/*","effect":"deny"}]\n\n---\n')
+        self.global_target.write_bytes(self.header + b'<!-- managed by chief-of-staff/install.sh; edit the source there and re-run it -->\nOld global.\n')
+        self.local_target.write_bytes(self.header + b'<!-- managed by chief-of-staff/install.sh; lean role -->\nOld local.\n')
+        self.home_patch = patch.object(Path, 'home', return_value=self.home)
+        self.home_patch.start(); self.addCleanup(self.home_patch.stop)
+
+    def call(self, local=False, **overrides):
+        target = self.local_target if local else self.global_target
+        args = dict(revision='lean-final', local=local, body_only=True,
+                    expected_sha256=overrides['expected_sha256'] if 'expected_sha256' in overrides else deploy.sha(target.read_bytes()))
+        args.update(overrides)
+        return deploy.deploy(self.brief, self.home, **args)
+
+    def test_both_targets_share_normal_generated_body_preserve_exact_independent_headers(self):
+        # JSON frontmatter is retained byte-for-byte too, never parsed/reserialized.
+        local_header = b'---\n{ "model": "other/model", "mode": "primary", "custom": {"taste":"caf\xc3\xa9"}, "permissions": [] }\n---\n'
+        self.local_target.write_bytes(local_header + deploy.split_bytes(self.local_target.read_bytes())[1])
+        other = self.global_target.with_name('lead.md'); other.write_bytes(b'foreign role')
+        pointer = self.brief / 'chief.json'; pointer.write_bytes(b'{"identity":"unchanged"}')
+        expected_body = deploy.split_bytes(deploy.render('hosts/opencode.md', str(self.brief)).encode())[1]
+        for local, target, header in ((False, self.global_target, self.header), (True, self.local_target, local_header)):
+            before = target.read_bytes(); target.chmod(0o640)
+            preview = self.call(local=local, dry=True)
+            self.assertEqual(preview['status'], 'would-update'); self.assertEqual(target.read_bytes(), before)
+            self.assertFalse(Path(preview['backup']).exists())
+            result = self.call(local=local)
+            self.assertEqual(result['status'], 'updated')
+            self.assertEqual(deploy.split_bytes(target.read_bytes()), (header, expected_body))
+            self.assertEqual(result['beforeHeaderSha256'], result['afterHeaderSha256'])
+            self.assertEqual(Path(result['backup']).read_bytes(), before)
+            self.assertEqual(target.stat().st_mode & 0o777, 0o640)
+            self.assertEqual(self.call(local=local)['status'], 'same')
+            self.assertEqual(self.call(local=local, revision='no-op')['status'], 'same')
+            self.assertFalse((self.brief / 'archive/reset-no-op-body').exists())
+            with self.assertRaisesRegex(ValueError, 'expected current bytes'):
+                self.call(local=local, expected_sha256=deploy.sha(before))
+        self.assertEqual(other.read_bytes(), b'foreign role'); self.assertEqual(pointer.read_bytes(), b'{"identity":"unchanged"}')
+        self.assertEqual(deploy.split_bytes(self.global_target.read_bytes())[1], deploy.split_bytes(self.local_target.read_bytes())[1])
+
+    def test_required_safe_revision_expected_bytes_and_immutable_archive(self):
+        before = self.global_target.read_bytes()
+        for revision in (None, '', '..', '../escape', '/absolute', 'a/b', 'a\\b', 'a\nnext'):
+            with self.assertRaisesRegex(ValueError, 'revision|basename'):
+                self.call(revision=revision)
+        for expected in (None, '', 'xyz', '0' * 64):
+            with self.assertRaisesRegex(ValueError, 'SHA256|expected current bytes'):
+                self.call(expected_sha256=expected)
+        self.assertFalse((self.brief / 'archive').exists())
+        result = self.call(); backup = Path(result['backup'])
+        self.global_target.write_bytes(before)
+        with self.assertRaisesRegex(ValueError, 'archive collision'): self.call()
+        self.assertEqual(self.global_target.read_bytes(), before); self.assertEqual(backup.read_bytes(), before)
+        with self.assertRaisesRegex(ValueError, 'only in body-only'):
+            deploy.deploy(self.brief, self.home, expected_sha256=deploy.sha(before))
+
+    def test_missing_unmanaged_and_ambiguous_marker_refuse_without_adoption(self):
+        for content in (b'unmanaged', self.header + b'foreign\n<!-- managed by chief-of-staff/install.sh; lean role -->\n',
+                        self.header + b'<!-- managed by chief-of-staff/install.sh -->\n'):
+            self.global_target.write_bytes(content)
+            with self.assertRaisesRegex(ValueError, 'frontmatter|exact managed'): self.call()
+            self.assertEqual(self.global_target.read_bytes(), content)
+        self.local_target.write_bytes(self.header + b'<!-- managed by chief-of-staff/install.sh; edit the source there and re-run it -->\n')
+        with self.assertRaisesRegex(ValueError, 'canonical lean chief'): self.call(local=True)
+        self.global_target.unlink()
+        with self.assertRaises(FileNotFoundError): self.call(expected_sha256='0' * 64)
+        self.assertFalse((self.brief / 'archive').exists())
+
+    def test_fixed_roots_and_symlinks_refuse(self):
+        for brief, home in ((self.home / 'other', self.home), (self.brief, self.home / 'other')):
+            with self.assertRaisesRegex(ValueError, 'fixed home'):
+                deploy.deploy(brief, home, revision='lean-final', body_only=True, expected_sha256='0' * 64)
+        original = self.global_target.read_bytes(); self.global_target.unlink(); self.global_target.symlink_to(self.local_target)
+        with self.assertRaisesRegex(ValueError, 'symlink'): self.call()
+        self.global_target.unlink(); self.global_target.write_bytes(original)
+        (self.brief / 'archive').symlink_to(self.home, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'symlink'): self.call()
+        self.assertEqual(self.global_target.read_bytes(), original)
+
+    def test_concurrent_expected_byte_change_refuses_before_backup(self):
+        render = deploy.render
+        def changed(*args):
+            self.global_target.write_bytes(b'independent concurrent edit')
+            return render(*args)
+        with patch.object(deploy, 'render', side_effect=changed):
+            with self.assertRaisesRegex(ValueError, 'concurrent target changed'): self.call()
+        self.assertEqual(self.global_target.read_bytes(), b'independent concurrent edit')
+        self.assertFalse((self.brief / 'archive').exists())
+
+    def test_concurrent_change_before_replace_preserves_new_owner_bytes_and_backup(self):
+        before = self.global_target.read_bytes(); validate = deploy.DestinationRoot.validate_all
+        checks = 0
+        def changed(root, targets):
+            nonlocal checks
+            validate(root, targets)
+            if targets == [self.global_target]:
+                checks += 1
+                if checks == 2: self.global_target.write_bytes(b'new owner bytes')
+        with patch.object(deploy.DestinationRoot, 'validate_all', new=changed):
+            with self.assertRaisesRegex(ValueError, 'before replacement'): self.call()
+        self.assertEqual(self.global_target.read_bytes(), b'new owner bytes')
+        self.assertEqual((self.brief / 'archive/reset-lean-final-body/chief-of-staff.md').read_bytes(), before)
+        self.assertEqual(list(self.global_target.parent.iterdir()), [self.global_target])
+
+    def test_normal_shell_entry_dry_run_both_selectors_and_unknown_target_refusal(self):
+        env = {**os.environ, 'HOME': str(self.home), 'CHIEF_BRIEF_DIR': str(self.brief)}
+        for local, target in ((False, self.global_target), (True, self.local_target)):
+            before = target.read_bytes()
+            command = ['bash', str(ROOT / 'install.sh'), '--chief-body-only', '--revision', 'lean-final',
+                       '--expected-sha256', deploy.sha(before), '--dry-run'] + (['--local'] if local else [])
+            result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)['target'], str(target))
+            self.assertEqual(target.read_bytes(), before)
+            for extra in (['--target', '/foreign'], ['opencode'], ['--uninstall'], ['--chief-permissions-only']):
+                refused = subprocess.run(command + extra, env=env, capture_output=True, text=True, timeout=15)
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertEqual(target.read_bytes(), before)
+        self.assertFalse((self.brief / 'archive').exists())

@@ -14,6 +14,10 @@
 #   ./install.sh --ordinary-call-maintenance LOCATION --revision NAME [--dry-run] refresh only an existing owned entry
 #   ./install.sh --print <host>      print the rendered file(s) for a host
 #   ./install.sh --chief-permissions-only [--dry-run]  preserve prompt, repair chief edit rules
+#   ./install.sh --chief-body-only --revision NAME --expected-sha256 SHA [--local] [--dry-run]
+#     fixed global/canonical local chief body only; exact frontmatter preserved;
+#     watched replacement may invalidate global Locations or the chief Location;
+#     coordinate the window first. No explicit reload/restart or policy updates.
 #   ./install.sh --profile technical same legacy defaults (also the no-argument default)
 #   ./install.sh --profile example   scoped local OpenCode/home bundle
 #   ./install.sh --profile <JSON>    another domain using the explicit scoped manifest
@@ -32,6 +36,10 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ${1:-} == --chief-body-only ]]; then
+  shift
+  exec python3 "$SRC/scripts/install-chief-permissions.py" "${CHIEF_BRIEF_DIR:-$HOME/.chief-of-staff}" "$HOME" --body-only "$@"
+fi
 if [[ ${1:-} == --ordinary-call-maintenance ]]; then
   shift
   exec python3 "$SRC/scripts/install-ordinary-call.py" "$@"
