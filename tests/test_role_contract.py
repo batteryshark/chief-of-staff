@@ -69,10 +69,10 @@ class Contract(unittest.TestCase):
         with self.assertRaises(ValueError):
             project_config({'agents': {'lead': {'system': 'custom'}}}, 'lead', '/Users/fixture', '/brief', '/fixture/a', [])
 
-    def test_globals_do_not_embed_project_grants(self):
+    def test_globals_embed_only_location_relative_project_grants(self):
         text = agent('lead', '/Users/fixture', '/brief')
         self.assertNotIn('*/LEAD.md', text)
-        self.assertNotIn('resource": "LEAD.md', text)
+        self.assertIn('resource": "LEAD.md', text)
         self.assertNotIn('general access', text)
 
     def test_cleanup_preserves_unrelated_and_changed_files(self):

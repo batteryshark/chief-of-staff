@@ -13,13 +13,7 @@ permissions:
     resource: "LEAD.md"
     effect: allow
   - action: edit
-    resource: "*/LEAD.md"
-    effect: allow
-  - action: edit
     resource: "lead/*"
-    effect: allow
-  - action: edit
-    resource: "*/lead/*"
     effect: allow
   - action: edit
     resource: "{{BRIEF_DIR}}/inbox/*.md"

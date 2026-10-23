@@ -95,6 +95,11 @@ def permissions(role, home, brief, location=None, plans=(), project_docs=()):
                          '????-??-??-*'):
             rules.append(rule('edit', resource))
     else:
+        # V2 checks internal mutation resources relative to the active Location.
+        # These literal relative grants work for every new lead, without enrollment
+        # or an absolute/sibling wildcard. External plans still need trusted binding.
+        for resource in ('LEAD.md', 'PROJECT.md', 'lead/*'):
+            rules.append(rule('edit', resource))
         grant('edit', brief + '/inbox/*.md')
         for resource in ('chief.json', 'models.md', 'inbox/*', 'research/*', 'handoff/*'):
             grant('external_directory', brief + '/' + resource)
@@ -106,7 +111,7 @@ def permissions(role, home, brief, location=None, plans=(), project_docs=()):
         rules.append(rule('docket_milestone', 'own'))
         if location:
             for resource in ('LEAD.md', 'PROJECT.md', 'lead/*'):
-                grant('edit', location + '/' + resource)
+                rules.append(rule('edit', location + '/' + resource))
             for plan in plans:
                 canonical(plan)
                 if not plan.endswith('.md') or Path(plan).parent.name != 'plans':

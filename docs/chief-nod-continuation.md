@@ -28,6 +28,53 @@ and alerts continue through nod-alert; ask tells informational callers to use it
 
 ## Original-session wake (historical lead bindings retained)
 
+### Tower per-card cutover
+
+New asks attempt one Tower announcement using `tower` on PATH, or the explicit
+`CHIEF_NOD_TOWER_CLI` executable path. No project venv path or dependency installer
+is embedded. The public CLI builds CloudEvents 1.0: type `nod.request.asked`, source
+`chief-nod`, subject `ev.nod.request.asked`. Its `--id` (also `Nats-Msg-Id`) is stable
+from the request id. Data includes only request_id, origin {session,directory}, and
+optional reference; no answer/card/limits/receipt or token. Only loopback
+`nats://127.0.0.1:4222` and `~/.tower/secrets/nats.token` are used; inline token
+overrides are removed from the child environment. Child output is suppressed.
+
+Under the ledger lock, a new row is saved with `tower_announcement.state=publishing`
+before publication. Missing CLI/token file or failed bounded TCP preflight means
+definitely no publish: `fallback` retains today's direct runner. Executable-not-found
+or permission failure at launch also falls back. After launch, nonzero exit/timeout/
+other OS error means `uncertain`, never fallback. CLI success means `announced`, not
+proof of watcher ingest or answer consumption. A crash can leave `publishing`; this
+is also held for operator reconciliation, not automatically released. `status` and
+ask output expose the route state without private event contents.
+
+The runner refuses its own wake for every announcement state except `fallback`,
+including unknown states. Historical rows without announcement metadata retain their
+existing routes. Fallback cards are never later announced. Duplicate asks retain
+existing create-intent refusal. No announcement retry/recovery command is provided;
+the 10-minute JetStream dedupe horizon alone is not an exactly-once guarantee.
+Uncertain/publishing cards need exact operator/Tower evidence; no automatic timeout
+release, action replay or invented success. Availability is deliberately sacrificed
+when admission is ambiguous. Watcher/handler failure after acceptance cannot safely
+switch a card back to local delivery without reconciliation.
+
+**Rollout:** before enabling bus-announcing asks, confirm the running
+`chief-nod-answers` Fleet service has loaded the cutover-aware helper bytes. Inspect
+its existing `runner_code_sha256`, `runner_pid`, `runner_last_tick` in status, compare
+the loaded hash to the installed helper, and inspect the exact Fleet process/service
+and `~/.chief-of-staff/nod-continuations/runner.log`. Replacing the file does not
+reload Python. Parent coordinates any authorized finite-runner reload; no second
+runner. CLI install/PATH contract is a deployment prerequisite; absence safely falls
+back before publication. No real test card or bus publish is part of source tests.
+
+**Rollback:** do not restore legacy delivery code while bus-owned rows exist: it
+ignores announcement metadata and could double-wake. Keep this fail-closed delivery
+filter while disabling new announcements (e.g. configure an absent CLI path), or
+stop the runner under existing authority pending exact per-card reconciliation.
+Never delete ownership marks or release uncertain rows merely to restore liveness.
+Parent owns E2E channel/recipient verification; chief-only sender/origin checks are
+unchanged, not bypassed for a throwaway-session test.
+
 From the current chief's own OpenCode shell context, use simply:
 
 ```sh
@@ -198,6 +245,24 @@ State meanings:
 - `acknowledged`: accountable Ops confirms durable processing record for the exact
   request/event/reference. This prevents delivery replay, not substantive work by itself.
 - `handled`: separate actual original-owner outcome is recorded after Ops ACK.
+
+The same ACK gate applies to `origin-wake-v1`: the asking owner records the exact
+request/event/reference, answer/limits and actual processing record, then ACKs,
+then records the separate actual owner outcome. A `sent` event cannot go directly
+to `handled`, even if work already happened. Repair bookkeeping from existing
+durable evidence, never by repeating the action or inventing a receipt. A receipt
+argument is checked for nonempty text, not verified as proof that a record exists.
+
+Receipt commands emit static diagnostic codes without echoing private arguments:
+`REQUEST_UNKNOWN` (not in this local ledger), `EVENT_UNKNOWN` (not in that request),
+`REFERENCE_MISMATCH` (not the exact original reference), `RECEIPT_EMPTY`,
+`ACK_STATE` (no possible delivery), `ACK_REQUIRED` (owner handling needs prior ACK),
+or `RESOLVE_STATE` (state does not permit the selected resolution).
+Other state/I/O/lookup failures retain the generic `CONTINUATION_FAILED` diagnostic.
+These codes do not establish what happened historically or authorize a retry, ACK,
+resolution or action. Inspect only the relevant private correlation and actual
+records; unknown or conflicting evidence remains unresolved. No private exception
+body is printed for generic continuation failures.
 
 The CLI has no caller admission ID or consumed-ACK interface. For uncertain events,
 use supported native session status/messages on the **persisted target** to seek

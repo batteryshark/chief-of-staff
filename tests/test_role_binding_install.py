@@ -15,6 +15,23 @@ spec.loader.exec_module(installer)
 
 
 class RoleBindingInstall(unittest.TestCase):
+    def test_new_project_then_new_native_plan_without_roster_enrollment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); location = root / 'brand-new'; location.mkdir()
+            target = location / '.opencode/opencode.json'
+            with patch.object(installer, 'knowledge_plans', return_value=[]):
+                installer.install(location)
+            plan = str(root / 'native/plans/new.md')
+            before = json.loads(target.read_text())['agents']['lead']['permissions']
+            self.assertEqual(winner('edit', plan, before)['effect'], 'deny')
+            # Trusted Knowledge discovery after a Plan is created, not enrollment.
+            with patch.object(installer, 'knowledge_plans', return_value=[plan]):
+                installer.install(location)
+            rules = json.loads(target.read_text())['agents']['lead']['permissions']
+            self.assertEqual(winner('edit', plan, rules)['effect'], 'allow')
+            self.assertEqual(winner('edit', str(root / 'native/plans/foreign.md'), rules)['effect'], 'deny')
+            self.assertFalse((root / '.docket').exists())
+
     def test_normal_installer_binding_keeps_unrelated_config_and_exact_own_scopes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); location = root / 'project'; location.mkdir()

@@ -79,6 +79,8 @@ class ContinuationTest(unittest.TestCase):
         self.env = patch.dict(os.environ, {'CHIEF_NOD_STATE_DIR': str(self.home),
                                           'CHIEF_NOD_OPS_POINTER': str(self.pointer)})
         self.env.start()
+        self.bus_probe = patch.object(self.nod.socket, 'create_connection', side_effect=OSError('offline'))
+        self.bus_probe.start()
         self.origin = {'session': 'ses_original', 'directory': '/original', 'reference': 'private-ref',
                        'limits': 'One hands action only; expires 2000-01-01. Never reboot. No renewed consent.'}
         self.snapshot = {'id': 'r1', 'title': 'Original hands request', 'expires_at': '2000-01-01T00:00:00Z',
@@ -89,6 +91,7 @@ class ContinuationTest(unittest.TestCase):
         self.calls = []
 
     def tearDown(self):
+        self.bus_probe.stop()
         self.env.stop()
         self.tmp.cleanup()
 
@@ -331,6 +334,64 @@ class ContinuationTest(unittest.TestCase):
             self.nod.continuation(args)
         self.assertEqual(self.event()[1]['state'], 'sent')
 
+    def test_receipt_diagnostics_are_static_and_refusals_preserve_state(self):
+        self.register()
+        self.deliver()
+        eid, _ = self.event()
+        cases = [
+            ('handled', {}, 'ACK_REQUIRED'),
+            ('ack', {'request_id': 'private-unknown-request'}, 'REQUEST_UNKNOWN'),
+            ('ack', {'event_id': 'private-unknown-event'}, 'EVENT_UNKNOWN'),
+            ('ack', {'reference': 'private-wrong-ref'}, 'REFERENCE_MISMATCH'),
+            ('ack', {'receipt': '  '}, 'RECEIPT_EMPTY'),
+            ('resolve', {'outcome': 'not-dispatched'}, 'RESOLVE_STATE'),
+        ]
+        before = (self.home / 'state.json').read_bytes()
+        for cmd, changes, code in cases:
+            with self.subTest(code=code):
+                values = dict(cmd=cmd, request_id='r1', event_id=eid,
+                              reference='private-ref', receipt='private-receipt')
+                values.update(changes)
+                with patch.object(self.nod, 'call') as api, patch.object(self.nod.subprocess, 'run') as run:
+                    with patch.object(sys, 'argv', ['chief-nod', cmd, values['request_id'],
+                         values['event_id'], '--reference', values['reference'], '--receipt', values['receipt']]
+                         + (['--outcome', values['outcome']] if cmd == 'resolve' else [])):
+                        with self.assertRaises(SystemExit) as error:
+                            self.nod.main()
+                    api.assert_not_called()
+                    run.assert_not_called()
+                diagnostic = str(error.exception)
+                self.assertIn(code + ':', diagnostic)
+                for private in ('r1', eid, 'private-', 'actually signed back in', 'Never reboot'):
+                    self.assertNotIn(private, diagnostic)
+                self.assertEqual((self.home / 'state.json').read_bytes(), before)
+
+    def test_ready_ack_and_resolve_refusals_have_specific_codes(self):
+        self.register()
+        for cmd, changes, code in [('ack', {}, 'ACK_STATE'),
+                                   ('resolve', {'outcome': 'admission-observed'}, 'RESOLVE_STATE')]:
+            with self.assertRaisesRegex(self.nod.ReceiptRefusal, code):
+                self.operation(cmd, **changes)
+        self.assertEqual(self.event()[1]['state'], 'ready')
+
+    def test_direct_owner_still_needs_ack_then_separate_outcome(self):
+        self.register()
+        with self.nod.state() as (data, save):
+            data['requests']['r1']['delivery_mode'] = 'origin-wake-v1'
+            event = next(iter(data['requests']['r1']['events'].values()))
+            event['state'] = 'sent'
+            save()
+            text = self.nod.envelope('r1', data['requests']['r1'], self.event()[0], event)
+        self.assertLess(text.index('before ACK or action'), text.index('chief-nod ack'))
+        self.assertLess(text.index('chief-nod ack'), text.index('chief-nod handled'))
+        self.assertIn('do not replay actions', text)
+        with self.assertRaisesRegex(self.nod.ReceiptRefusal, 'ACK_REQUIRED'):
+            self.operation('handled')
+        self.operation('ack')
+        self.operation('handled')
+        self.assertEqual(self.event()[1]['state'], 'handled')
+        self.assertFalse(self.deliver().called)
+
     def test_tracked_ask_registers_with_server_idempotency_and_never_reposts(self):
         args = argparse.Namespace(file=None, channel='chief', image=None, recommended=None, recommendation=None,
                                   dry_run=False, origin_session='ses_original', origin_directory='/original',
@@ -527,6 +588,93 @@ class ContinuationTest(unittest.TestCase):
             self.nod.continuation(args)
         self.assertEqual(self.read()['runner_code_sha256'],loaded)
         self.assertEqual(self.read()['runner_pid'],os.getpid())
+
+    def tower_ask(self, result=None, crash=False):
+        def publish(argv, **kwargs):
+            row = self.read()['requests']['r1']
+            self.assertEqual(row['tower_announcement']['state'], 'publishing')
+            # A second runner cannot take the ledger lock until publication ends;
+            # even one observing the durable snapshot must not direct-wake.
+            with patch.object(self.nod, 'live_ops', side_effect=AssertionError('double wake')):
+                self.nod.deliver(self.read(), lambda: None)
+            self.assertEqual(argv[:3], ['/fake/tower', 'pub', 'nod.request.asked'])
+            self.assertEqual(argv[argv.index('--source')+1], 'chief-nod')
+            self.assertEqual(argv[argv.index('--subject')+1], 'ev.nod.request.asked')
+            payload = json.loads(argv[argv.index('--data')+1])
+            self.assertEqual(set(payload), {'request_id', 'origin', 'reference'})
+            self.assertEqual(payload['origin'], {'session':'ses_lead','directory':'/owner'})
+            self.assertNotIn('NATS_TOKEN', kwargs['env'])
+            self.assertEqual(kwargs['env']['TOWER_NATS_URL'], 'nats://127.0.0.1:4222')
+            self.assertTrue(kwargs['env']['TOWER_NATS_TOKEN_FILE'].endswith('/.tower/secrets/nats.token'))
+            self.assertEqual(kwargs['stderr'], subprocess.DEVNULL)
+            self.assertEqual(kwargs['stdout'], subprocess.DEVNULL)
+            if crash:
+                raise SystemExit('fixture crash')
+            if isinstance(result, Exception):
+                raise result
+            return argparse.Namespace(returncode=result or 0)
+        with patch.object(self.nod.shutil, 'which', return_value='/fake/tower'), \
+             patch.object(Path, 'is_file', return_value=True), \
+             patch.object(self.nod.socket, 'create_connection') as probe, \
+             patch.object(self.nod.subprocess, 'run', side_effect=publish), \
+             patch.object(self.nod, 'native_origin', return_value={'session':'ses_lead','directory':'/owner'}), \
+             patch.dict(os.environ, {'CHIEF_NOD_TOWER_CLI':'/fake/tower', 'NATS_TOKEN':'secret'}):
+            self.fresh_ask()
+            probe.assert_called_once_with(('127.0.0.1',4222), timeout=2)
+
+    def test_tower_success_is_persisted_and_no_direct_wake_or_duplicate_ask(self):
+        self.tower_ask()
+        row = self.read()['requests']['r1']
+        self.assertEqual(row['tower_announcement']['state'], 'announced')
+        self.assertEqual(row['tower_announcement']['id'], 'chief-nod-request-' + self.nod.digest('r1'))
+        self.assertFalse(self.deliver().called)
+        # No dependence on the server's 10-minute dedupe window: no second POST/pub.
+        with patch.object(self.nod.time, 'time', return_value=10**12), \
+             patch.object(self.nod, 'native_origin', return_value={'session':'ses_lead','directory':'/owner'}), \
+             patch.object(self.nod, 'announce_tower', side_effect=AssertionError('retry')):
+            with self.assertRaises(ValueError):
+                self.fresh_ask()
+
+    def test_tower_post_launch_failures_and_crash_hold_without_double_wake(self):
+        for result in (1, subprocess.TimeoutExpired('private command', 15), OSError('private detail')):
+            with self.subTest(result=type(result).__name__):
+                if (self.home/'state.json').exists():
+                    (self.home/'state.json').unlink()
+                self.tower_ask(result=result)
+                self.assertEqual(self.read()['requests']['r1']['tower_announcement']['state'], 'uncertain')
+                self.assertFalse(self.deliver().called)
+        (self.home/'state.json').unlink()
+        with self.assertRaises(SystemExit):
+            self.tower_ask(crash=True)
+        self.assertEqual(self.read()['requests']['r1']['tower_announcement']['state'], 'publishing')
+        self.assertFalse(self.deliver().called)
+
+    def test_clear_tower_outage_retains_runner_and_legacy_rows_unchanged(self):
+        with patch.object(self.nod, 'native_origin', return_value={'session':'ses_lead','directory':'/owner'}), \
+             patch.object(self.nod.shutil, 'which', return_value='/fake/tower'), \
+             patch.object(Path, 'is_file', return_value=True), \
+             patch.object(self.nod.subprocess, 'run') as run:
+            self.fresh_ask()
+            run.assert_not_called()
+        self.assertEqual(self.read()['requests']['r1']['tower_announcement']['state'], 'fallback')
+        with patch.object(self.nod, 'native_origin', return_value={'session':'ses_lead','directory':'/owner'}):
+            self.assertTrue(self.deliver().called)
+        self.assertEqual(self.event()[1]['state'], 'sent')
+
+    def test_malformed_announcement_is_not_legacy_or_fallback(self):
+        self.register()
+        for malformed in ({}, None, [], 'fallback', {'id':'missing-state'}, {'state':'unknown'}):
+            with self.subTest(announcement=malformed):
+                with self.nod.state() as (data, save):
+                    data['requests']['r1']['tower_announcement'] = malformed
+                    save()
+                self.assertFalse(self.deliver().called)
+                self.assertEqual(self.event()[1]['state'], 'ready')
+        with self.nod.state() as (data, save):
+            data['requests']['r1']['tower_announcement'] = {'state':'fallback'}
+            save()
+        self.assertTrue(self.deliver().called)
+        self.assertEqual(self.event()[1]['state'], 'sent')
 
 
 if __name__ == '__main__':

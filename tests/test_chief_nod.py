@@ -33,8 +33,11 @@ class ChiefNodTest(unittest.TestCase):
         (self.root/'chief.json').write_text(json.dumps({'session':'ses_chief','directory':str(self.root)}))
         self.env = patch.dict(os.environ, {'OPENCODE_SESSION_ID':'ses_chief','CHIEF_NOD_STATE_DIR':str(self.root/'state')})
         self.env.start()
+        self.bus_probe = patch.object(self.nod.socket, 'create_connection', side_effect=OSError('fixture offline'))
+        self.bus_probe.start()
 
     def tearDown(self):
+        self.bus_probe.stop()
         self.env.stop(); self.tmp.cleanup()
 
     def args(self, **kw):

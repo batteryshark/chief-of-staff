@@ -2,6 +2,8 @@
 """Install one lead's permission-only Location binding using trusted Knowledge discovery.
 
 No roster enrollment or session/model/goal operation. Global prompts are a separate migration.
+Internal own-file permissions are generic in the global role. This optional binding
+adds exact absolute aliases and current Knowledge plans; rerun after creating a Plan.
 """
 import argparse
 import json

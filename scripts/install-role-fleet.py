@@ -3,6 +3,8 @@
 
 Read native identity and Knowledge; write only managed roles/runtime and permission config.
 Never enroll, release, prompt, re-goal or change a session/model. No service restart.
+Roster discovery here migrates existing installations only; generic own-file access
+for future lead Locations is supplied by the global role, not this enumeration.
 """
 import argparse
 import hashlib
