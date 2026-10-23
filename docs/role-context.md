@@ -11,7 +11,11 @@ the provider base; no second management-prompt mechanism is needed.
 
 The operational installer imports `scripts/role_context.py`:
 
-- `compile_denials(role, registry, allowlist)` returns `{role: [exact deny rules]}`.
+- `compile_denials(role, registry, allowlist, *, tool_actions=None)` returns
+  `{role: [exact deny rules]}`. Optional `tool_actions` maps exact tool IDs to verified
+  declared permission actions; `None` explicitly records direct-schema-only coverage.
+  Unknown excluded tools without this classification are refused, not identity-guessed.
+  The same keyword is accepted by append_denials, amend_header and prepare.
 - `append_denials(existing, role, registry, allowlist)` preserves every original rule
   and order, appending only absent exact denies.
 - Both inventories are `{tools: [exact IDs], skills: [exact IDs]}`. Supply fully loaded
@@ -29,8 +33,17 @@ The operational installer imports `scripts/role_context.py`:
 - `rollback(receipt)` restores only the exact installed postimage; subsequent owner
   changes cause refusal. The operational driver preflights/co-ordinates multiple files.
 
-No function grants access. Rules use existing effective permission IDs. Tool-specific
-checks still decide execution; metadata readback is not proof of call denial.
+No function grants access. Tool IDs are NOT necessarily permission actions:
+`patch`, `write`, `edit` and native `opencode_worktree_remove` all use **edit**.
+The compiler never blanket-denies edit to hide one tool: existing own-path edit rules
+remain unchanged. Other shared actions used by an allowed tool likewise are not
+blanket-denied. A direct-schema exclusion is not an independent execution boundary.
+Native actions come from official V2 permissions documentation and the declared
+installed tool metadata; verified MCP actions use normalized server_tool names.
+Custom registrations without declared permission metadata remain direct-schema-only
+(explicit None mapping); do not invent an action from their tool name. Existing fictitious
+native alias rules are refused for owner reconciliation rather than silently removed.
+Tool-specific checks decide execution; metadata readback is not proof of call denial.
 New catalog entries require a reviewed inventory and normal installer rerun.
 
 ## Role dependencies
@@ -44,15 +57,24 @@ other role tool lists. Galley remains owner of writer permissions/agent generati
 Chief skills are checkpoint, reset-*, upstream-courtesy, shape and deep-research;
 expand patterns to exact observed IDs before passing the compiler its allowlist.
 
-## Observed scope and known advertising gap
+## Corrected evidence: fresh catalogs and existing-session updates
 
-One native scoped investigation confirmed the direct excluded schema was absent and
-required nested resource listing executed. Config-first excluded tool/skill DENIES
-were visible in native agent metadata. However the final outgoing system still
-advertised a denied skill and nested tool name. No denied call was attempted.
-Do not claim full catalog removal, verified denied execution, or associated token
-savings. Retain the advertising gap as an open host integration issue. No host fork,
-text surgery of provider catalogs or further probe campaign is part of this rollout.
+The original hosted investigation reused a session and searched initial system names
+without observing message updates. Its host-gap conclusion is **withdrawn**. Independent
+plain OpenCode 2.1.3 evidence shows fresh denied skills are omitted; existing sessions
+retain their initial catalog history followed by explicit skill revocation updates.
+Historical name presence alone is not current availability or a host defect.
+
+The earlier worktree test denied the fictitious opencode_worktree_remove action, not
+its actual edit action. With edit denied, plain 2.1.3 omits that tool; this rollout must
+NOT deny edit globally because required own-file editing shares the action. Preserve
+resource-based edit policy and use direct-schema filtering where independently possible.
+
+Required nested resource listing executed in the historical hosted check; no excluded
+call was tested. Final measurement uses fresh matched no-effect sessions, with IDs-only
+catalog and message-update observation for the lead. Do not infer denied execution
+from metadata, or savings from historical system-name scans. No upstream bug has been
+established; no host fork, provider-catalog text surgery or probe campaign is authorized.
 
 ## Can unused servers/plugins be disconnected per agent?
 
@@ -61,8 +83,8 @@ No per-agent server/plugin lifecycle mechanism is documented in official V2:
 - [MCP servers](https://opencode.ai/v2/docs/mcp-servers) exposes `mcp.servers.<id>.disabled`
   at configuration/Location scope. Per-agent tool permission denies hide/deny tools
   **without disconnecting the server**. Documentation says server instructions are
-  omitted if all its tools are denied (or Code Mode execute is denied); the observed
-  harness catalog gap above still applies. Do not disable execute when required tools use it.
+  omitted if all its tools are denied (or Code Mode execute is denied). Evaluate actual
+  permission actions and instruction updates. Do not disable required Code Mode execute.
 - [Plugins](https://opencode.ai/v2/docs/plugins) configures plugin arrays and removal
   IDs at global/project scope. A plugin option named `agent` is plugin-specific input,
   not a generic per-agent lifecycle switch.

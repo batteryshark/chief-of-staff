@@ -16,6 +16,32 @@ import tempfile
 from access_policy import agent_parts
 
 ROLES = frozenset(('chief', 'lead', 'writer', 'dispatcher'))
+# Official V2 /permissions actions; worktree_remove's declared edit action is
+# confirmed by the clean installed-2.1.3 finding. Do not infer other opencode IDs.
+NATIVE_ACTIONS = {name: name for name in (
+    'read', 'glob', 'grep', 'shell', 'skill', 'subagent', 'question', 'webfetch',
+    'websearch', 'execute', 'opencode_list_mcp_resources', 'opencode_read_mcp_resource')}
+NATIVE_ACTIONS.update(dict(patch='edit', write='edit', edit='edit',
+                           opencode_worktree_remove='edit'))
+
+
+def _actions(tool_actions):
+    if tool_actions is None:
+        return dict(NATIVE_ACTIONS)
+    if not isinstance(tool_actions, dict):
+        raise ValueError('tool_actions must be verified tool-ID/action metadata')
+    result = dict(NATIVE_ACTIONS)
+    for tool, action in tool_actions.items():
+        _ids([tool], 'tool_actions tool')
+        if action is not None:
+            _ids([action], 'tool_actions action')
+        if tool in NATIVE_ACTIONS and action != NATIVE_ACTIONS[tool]:
+            raise ValueError('declared native permission action mismatch: ' + tool)
+        if (tool.startswith('opencode_') and tool not in NATIVE_ACTIONS
+                and action is not None and action not in NATIVE_ACTIONS.values()):
+            raise ValueError('unsupported native permission mapping: ' + tool)
+        result[tool] = action
+    return result
 
 
 def _ids(value, label):
@@ -35,7 +61,7 @@ def _inventory(value, label):
     return {kind: _ids(value[kind], label + '.' + kind) for kind in ('tools', 'skills')}
 
 
-def compile_denials(role, registry, allowlist):
+def compile_denials(role, registry, allowlist, *, tool_actions=None):
     """Return {role: [exact deny entries]} without changing any supplied object.
 
     Allowlist is the reviewed exact role inventory, not patterns. Requiring every
@@ -63,14 +89,30 @@ def compile_denials(role, registry, allowlist):
         missing = set(allowed[kind]) - set(registry[kind])
         if missing:
             raise ValueError('incomplete registry: missing ' + kind + ' ' + ', '.join(sorted(missing)))
-    denies = [{'action': tool, 'resource': '*', 'effect': 'deny'}
-              for tool in registry['tools'] if tool not in allowed['tools']]
+    actions = _actions(tool_actions)
+    allowed_actions = {actions[tool] for tool in allowed['tools'] if tool in actions}
+    denies = []
+    for tool in registry['tools']:
+        if tool in allowed['tools']:
+            continue
+        if tool not in actions:
+            raise ValueError('excluded tool requires verified permission metadata: ' + tool)
+        action = actions[tool]
+        if action is None:  # Explicitly reviewed direct-schema-only coverage.
+            continue
+        # Shared actions are resource policies, not independent tool switches.
+        # Never erase own-file grants to hide worktree_remove/patch/write/edit.
+        if action == 'edit' or action in allowed_actions:
+            continue
+        rule = {'action': action, 'resource': '*', 'effect': 'deny'}
+        if rule not in denies:
+            denies.append(rule)
     denies += [{'action': 'skill', 'resource': skill, 'effect': 'deny'}
                for skill in registry['skills'] if skill not in allowed['skills']]
     return {role: denies}
 
 
-def append_denials(existing, role, registry, allowlist):
+def append_denials(existing, role, registry, allowlist, *, tool_actions=None):
     """Keep all existing rules/order (including duplicates), append only new denies."""
     if not isinstance(existing, list):
         raise ValueError('existing rules must be a list')
@@ -79,14 +121,16 @@ def append_denials(existing, role, registry, allowlist):
                 or not all(isinstance(rule[k], str) and rule[k] for k in rule)
                 or rule['effect'] not in ('allow', 'ask', 'deny')):
             raise ValueError('unsupported existing permission rule')
+        if rule['action'] in NATIVE_ACTIONS and NATIVE_ACTIONS[rule['action']] != rule['action']:
+            raise ValueError('existing tool-ID permission requires owner reconciliation')
     result = deepcopy(existing)
-    for rule in compile_denials(role, registry, allowlist)[role]:
+    for rule in compile_denials(role, registry, allowlist, tool_actions=tool_actions)[role]:
         if rule not in result:
             result.append(rule)
     return result
 
 
-def amend_header(text, role, registry, allowlist):
+def amend_header(text, role, registry, allowlist, *, tool_actions=None):
     """Preserve body and every non-permissions header byte; refuse JSON headers.
 
     Native YAML block/inline-JSON permissions are parsed by the existing narrow
@@ -96,7 +140,7 @@ def amend_header(text, role, registry, allowlist):
     header, body, existing, fields, match = agent_parts(text)
     if fields is not None:
         raise ValueError('JSON frontmatter requires byte-preserving native wiring')
-    updated = append_denials(existing, role, registry, allowlist)
+    updated = append_denials(existing, role, registry, allowlist, tool_actions=tool_actions)
     if updated == existing:
         return text
     replacement = 'permissions: ' + json.dumps(updated) + '\n'
@@ -113,7 +157,7 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def prepare(path, role, registry, allowlist, expected_sha256):
+def prepare(path, role, registry, allowlist, expected_sha256, *, tool_actions=None):
     """Dry-run one existing managed agent; returns serializable exact-hash manifest."""
     path = Path(path)
     if not path.is_absolute() or path.is_symlink() or not path.is_file() or path.resolve() != path:
@@ -124,7 +168,7 @@ def prepare(path, role, registry, allowlist, expected_sha256):
     text = raw.decode()
     if 'managed by chief-of-staff/install.sh' not in text:
         raise ValueError('unmanaged agent; owner reconciliation required')
-    after = amend_header(text, role, registry, allowlist).encode()
+    after = amend_header(text, role, registry, allowlist, tool_actions=tool_actions).encode()
     return {'path': str(path), 'role': role, 'beforeSha256': sha(raw),
             'afterSha256': sha(after), 'afterText': after.decode()}
 

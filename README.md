@@ -38,9 +38,13 @@ The separate [lead-kit](https://github.com/batteryshark/lead-kit) is for one acc
 The OpenCode installer includes request-local direct-schema filtering. Reviewed
 install-time inventories can also compile additive tool/skill denies, preserving
 existing permissions. These are restrictions, not generic per-agent MCP/plugin
-unloading: shared providers remain enabled. Stale nested-tool and skill advertising
-is a known host gap; no full catalog diet, verified denied execution or token savings
-is claimed. New catalog entries require reviewed inventory and normal reinstall.
+unloading: shared providers remain enabled. Fresh denied skills are hidden; reused
+sessions retain history with explicit revocation updates. The earlier host-gap
+diagnosis is withdrawn: tool IDs can differ from permission actions, and shared edit
+permissions must remain intact. No upstream bug, full catalog diet, verified denied
+execution or token savings is claimed. Unknown actions require explicit
+direct-schema-only classification. New catalog entries require reviewed inventory
+and normal reinstall.
 See [role-context scope and limitations](docs/role-context.md).
 
 Basic rendering and installation use Bash and Python 3.10+ with the standard library. Install your host application separately, with an available model and the tools/permissions your workflow needs. Instruction files don't supply model access or credentials.
