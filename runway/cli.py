@@ -319,6 +319,8 @@ def main():
                     result = credit.status(time.time())
                     if req.get('format') != 'json':
                         result = Text(credit_line(result))
+                elif action == 'promo-cancel-unsent':
+                    result = credit.cancel_unsent(req['attempt'], req.get('confirmed_not_sent'))
                 elif action == 'promo-prepare':
                     result = credit.prepare(req['task'], time.time())
                 elif action == 'promo-dispatch':

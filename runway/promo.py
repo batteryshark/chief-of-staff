@@ -28,7 +28,7 @@ ROUTES = {
                  'purpose': 'api-only'},
     'api-haiku-proof': {'model': 'anthropic-promo/claude-haiku-5-5', 'purpose': 'proof'},
 }
-RESERVES = {'api-fable': 12_000_000, 'api-opus': 6_000_000, 'api-haiku-proof': 1_000_000}
+RESERVES = {'api-fable': 17_000_000, 'api-opus': 6_000_000, 'api-haiku-proof': 1_000_000}
 # Official first-party global standard prices, USD / million tokens, 2026-10-23.
 # Cache creation uses the higher 1h rate when native usage does not distinguish TTL.
 RATES = {'claude-fable-5-1': (10, 50, 20, .25),
@@ -139,8 +139,9 @@ class Credit:
                     'SELECT 1 FROM holds WHERE actual>bound LIMIT 1').fetchone())}
 
     def reserve(self, aid, bound, now, job=None):
-        if type(bound) is not int or not 0 < bound <= 20_000_000:
-            raise ValueError('liability must be positive and at most the $20 per-job safety ceiling')
+        limit = RESERVES['api-fable'] if job and job.get('route') == 'api-fable' else 20_000_000
+        if type(bound) is not int or not 0 < bound <= limit:
+            raise ValueError('liability must be positive and within the route admission limit')
         self.db.execute('BEGIN IMMEDIATE')
         try:
             if job is not None:
@@ -249,6 +250,35 @@ class Credit:
         if not row:
             raise ValueError('unknown promo attempt')
         return json.loads(row[0])
+
+    def cancel_unsent(self, aid, confirmed_not_sent):
+        """Administrative release, never a provider receipt. Serialize with create."""
+        if confirmed_not_sent is not True:
+            raise ValueError('explicit confirmed_not_sent=true required')
+        self.db.execute('BEGIN IMMEDIATE')
+        try:
+            row = self.db.execute(
+                'SELECT j.session,j.body,h.actual,h.receipt FROM jobs j JOIN holds h ON h.id=j.id WHERE j.id=?',
+                (aid,)).fetchone()
+            if row is None:
+                raise ValueError('unknown promo attempt/hold')
+            job = json.loads(row[1])
+            if (row[0] is not None or 'session' in job or job.get('state') != 'prepared'
+                    or row[2] is not None or row[3] is not None
+                    or set(job) - {'route', 'model', 'variant', 'directory', 'digest', 'state', 'created_at'}):
+                raise ValueError('only pristine prepared unbound unsettled attempts may cancel')
+            job.update(state='cancelled', administrative_release={
+                'kind': 'confirmed-unsent', 'confirmed_not_sent': True,
+                'provider_usage_claimed': False})
+            # Zero is the accounting release sentinel; receipt deliberately stays NULL.
+            self.db.execute('UPDATE holds SET actual=0 WHERE id=?', (aid,))
+            self.db.execute('UPDATE jobs SET body=? WHERE id=?', (json.dumps(job), aid))
+            self.db.execute('COMMIT')
+            return {'attempt': aid, 'state': 'cancelled', 'administrative_release': True,
+                    'provider_usage_claimed': False}
+        except BaseException:
+            self.db.execute('ROLLBACK')
+            raise
 
     def change(self, aid, expected, state, **fields):
         self.db.execute('BEGIN IMMEDIATE')

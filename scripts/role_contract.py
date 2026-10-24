@@ -38,6 +38,29 @@ def rule(action, resource, effect='allow'):
     return dict(action=action, resource=resource, effect=effect)
 
 
+def native_plan_edit_rule(home):
+    canonical(home)
+    return rule('edit', home + '/.config/openchamber/projects/*/plans/*.md')
+
+
+def native_plan_overlay(existing, home):
+    """Amend a reviewed legacy lead overlay without regenerating its other rules.
+
+    Ownership/preimage verification belongs to the installer. Insert immediately
+    after the generated baseline, so every later custom restriction still wins.
+    External V2 mutation resources are absolute; no relative alias is needed.
+    """
+    result = json.loads(json.dumps(existing))
+    rules = result.get('agents', {}).get('lead', {}).get('permissions')
+    baseline = rule('edit', '*', 'deny')
+    if not isinstance(rules, list) or not rules or rules[0] != baseline or rules.count(baseline) != 1:
+        raise ValueError('reviewed single leading edit-deny baseline required')
+    grant = native_plan_edit_rule(home)
+    if grant not in rules:
+        rules.insert(1, grant)
+    return result
+
+
 def aliases(location, target):
     """Host checks Location-relative resources as well as absolute resources."""
     canonical(location)
@@ -98,9 +121,10 @@ def permissions(role, home, brief, location=None, plans=(), project_docs=()):
     else:
         # V2 checks internal mutation resources relative to the active Location.
         # These literal relative grants work for every new lead, without enrollment
-        # or an absolute/sibling wildcard. External plans still need trusted binding.
+        # or an absolute/sibling project wildcard.
         for resource in ('LEAD.md', 'PROJECT.md', 'lead/*'):
             rules.append(rule('edit', resource))
+        rules.append(native_plan_edit_rule(home))
         grant('edit', brief + '/inbox/*.md')
         for resource in ('chief.json', 'models.md', 'inbox/*', 'research/*', 'handoff/*'):
             grant('external_directory', brief + '/' + resource)

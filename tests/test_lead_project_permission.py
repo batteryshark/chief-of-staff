@@ -24,8 +24,7 @@ class LeadProjectPermission(unittest.TestCase):
                              '../foreign/LEAD.md', '/foreign/PROJECT.md',
                              '/foreign/lead/log.md', 'lead/../../foreign/LEAD.md',
                              'lead/../src/main.py', 'lead/.env', 'lead/private.key',
-                             'lead/private.pem', '/fixture/brief/secrets/token',
-                             '/fixture/home/.config/openchamber/projects/foreign/plans/new.md'):
+                             'lead/private.pem', '/fixture/brief/secrets/token'):
                 with self.subTest(directory=directory, resource=resource):
                     self.assertEqual(winner('edit', posixpath.normpath(resource), rules)['effect'], 'deny')
         self.assertFalse(any(r['effect'] == 'allow' and r['resource'] in

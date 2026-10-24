@@ -103,12 +103,13 @@ class NativeTests(unittest.TestCase):
         self.assertEqual(self.credit.status(NOW)['held_usd'], 0)
 
     def test_practical_reservation_and_cap(self):
-        for i in range(15):
+        for i in range(10):
             self.credit.prepare({**self.task, 'attempt': str(i), 'route': 'api-fable',
                                  'purpose': 'independent-review'}, NOW)
         with self.assertRaises(ValueError):
-            self.credit.prepare(self.task, NOW)
-        self.assertEqual(self.credit.status(NOW)['held_usd'], 180)
+            self.credit.prepare({**self.task, 'route': 'api-fable',
+                                 'purpose': 'independent-review'}, NOW)
+        self.assertEqual(self.credit.status(NOW)['held_usd'], 170)
 
     def test_unknown_send_never_automatically_retried(self):
         self.credit.prepare(self.task, NOW)
@@ -163,7 +164,7 @@ class NativeTests(unittest.TestCase):
             self.native.receipt['model'] = wrong
             with self.assertRaises(ValueError):
                 collect(self.credit, 'job-a', self.native)
-        self.assertEqual(self.credit.status(NOW)['held_usd'], 12)
+        self.assertEqual(self.credit.status(NOW)['held_usd'], 17)
         self.native.receipt['model'] = self.native.info['model']
         self.assertEqual(collect(self.credit, 'job-a', self.native)['state'], 'settled')
 

@@ -126,5 +126,8 @@ absent-only install/rollback and the parent-approved-next-stage Haiku proof plan
 Do not advertise direct manual provider use as budget protected.
 Native output excludes reasoning: require both integer counters and price their sum.
 Ordinary request cap8192 includes thinking; Haiku proof override32 is unchanged.
-Example $12/$6 reserves and the configured 90% stop remain local estimates with
+Example $17/$6 reserves (Fable requires ≤32,768/HIGH) and the configured 90% stop remain local estimates with
 mandatory Console backstop. See docs/LOCAL-SETUP.md for explicit local policy and routes.
+# Optional ordinary Astra
+
+See [the opt-in example](ORDINARY-ASTRA.md); default routes remain empty.

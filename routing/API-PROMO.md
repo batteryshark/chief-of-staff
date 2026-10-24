@@ -19,7 +19,7 @@ Direct manual provider use bypasses Runway accounting and is NOT budget protecte
 Separate SQLite `promo.sqlite3`: operator-configured promo grant and 90%
 spent+held+new-reservation stop; BEGIN IMMEDIATE admission, integer micro-USD,
 unique attempts and receipts. No default grant is asserted.
-Practical per-job estimates: Fable$12, Opus$6, Haiku proof$1. These are conservative
+Practical per-job estimates: Fable$17 (≤32,768/HIGH), Opus$6, Haiku proof$1. These are conservative
 estimates, NOT hard total native liabilities. Fable estimate allows roughly128k
 cache-creation-price input plus8192 output+reasoning per attempt across four attempts
 (Fable $11.8784, Opus $4.75136 at128000 input tokens/attempt);
@@ -234,3 +234,8 @@ already-bound prompt. Both use normal `opencode api`, no new transport or wait l
 The25s plugin timer may interrupt a slow helper; persisted states/holds survive and
 collection is safe, never blindly resend. Explicit native commands above avoid that
 timer for the parent proof. Real Fable Tower review follows only after accepted proof.
+# Current Fable bound and cancellation
+
+See [Fable headroom](FABLE-HEADROOM.md) for the final $17 reserve,
+operator-owned ≤32,768/HIGH prerequisite and atomic unsent cancellation.
+Historical rollout instructions below do not automatically migrate local inputs.
