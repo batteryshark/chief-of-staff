@@ -1,0 +1,16 @@
+{
+  "api_routes": [
+    {"id": "api-fable", "model": "anthropic-promo/claude-fable-5-1", "variant": "high", "purpose": "independent-review"},
+    {"id": "api-opus", "model": "anthropic-promo/claude-opus-5-5", "purpose": "api-only"}
+  ],
+  "promo": {
+    "grant_usd": 200,
+    "new_work_stop_usd": 180,
+    "renewal_day": 26,
+    "accounting_timezone": "UTC",
+    "current_expiry_date": "2026-10-26",
+    "renewal_requires_confirmation": true,
+    "private_authority_store": "promo.sqlite3",
+    "dispatch_enabled": true
+  }
+}

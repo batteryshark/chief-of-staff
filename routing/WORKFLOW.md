@@ -109,3 +109,21 @@ The helper does not repair raw UI/host goal loops, make native admission and hol
 This integration currently requires the worker's native directory to equal the caller's native Location. It does not relocate callers, implement cross-Location dispatch or change existing leads. An already authorized separate source checkout remains governed by the existing Runway checkout contract.
 
 After normal owner installation, read back effective `ctx.options.hostDispatch`, exact chief/lead eligibility and fresh `prepare` action `runway.dispatch`. The single authorized installed fixture must verify native worker agent/location/selectable `model.id`/variant/no-goal, then exact result `origin` (session/message/tool call), `inputID`, `assistantID` and `idleID`; held/archived/unknown policy must refuse. Missing options must leave ordinary read/admission operations working but the new dispatch path disabled. Source unit tests are not this installed readback.
+# API promotional candidate (separate from percent quotas)
+
+Explicit `promo-plan` task `{route:"api-fable", purpose:"independent-review"}`
+selects exact Fable5.1/high; `{route:"api-opus", purpose:"api-only"}` selects exact
+Opus5.5. Include tiny `text` (<=32768 UTF-8 bytes), unique `attempt` and `directory`
+in `promo-prepare` to reserve credit before dispatch. Native residual risk is accepted
+only with private verified Console-backstop authority. Never substitute subscription
+for an API-required request. Ordinary bulk work never uses these routes, even BURN.
+`promo-status` shows a local-estimate CREDIT promo row, not a provider balance;
+unverified cycles block admission. `promo-bind`, `promo-claim-send` / `promo-send`,
+and `promo-settle` persist caller-session dispatch/actual native receipts; no automatic
+resend or inference waiting. `promo-dispatch` is a convenience create/bind/async send.
+See `routing/API-PROMO.md` for exact limits,
+absent-only install/rollback and the parent-approved-next-stage Haiku proof plan.
+Do not advertise direct manual provider use as budget protected.
+Native output excludes reasoning: require both integer counters and price their sum.
+Ordinary request cap8192 includes thinking; Haiku proof override32 is unchanged.
+Existing $12/$6 reserves and $180 stop remain local estimates with Console backstop.

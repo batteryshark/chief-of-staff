@@ -118,6 +118,11 @@ class LocalAPI:
 
 def handle(req, config, ledger, quota, host):
     action = req['action']
+    # API-required work must never fall through to subscription/percent routing.
+    if action in ('plan', 'prepare') and (req.get('task', {}).get('api_required') or
+            req.get('task', {}).get('route') in ('api-fable', 'api-opus', 'api-haiku-proof')):
+        from .promo import plan
+        return plan(req['task'])
     if action == 'dispatch-get':
         return ledger.dispatch_get(req['attempt'])
     if action == 'dispatch-save':
@@ -289,6 +294,44 @@ def main():
         config = json.loads((root / 'routes.json').read_text())
         validate(config)
         req = json.load(sys.stdin)
+        promo_action = req['action'].startswith('promo-')
+        if req['action'] in ('plan', 'prepare') and (req.get('task', {}).get('api_required') or
+                req.get('task', {}).get('route') in ('api-fable', 'api-opus', 'api-haiku-proof')):
+            req['action'] = 'promo-' + req['action']
+            promo_action = True
+        if promo_action:
+            from .promo import Credit, credit_line, plan
+            from .promo_native import Native, dispatch, bind, send, claim_send, collect
+            if req['action'] == 'promo-plan':
+                print(json.dumps(plan(req['task'])))
+                return 0
+            if not (root / 'promo.sqlite3').is_file():
+                raise ValueError('parent-authorized promo initialization required')
+            credit = Credit(root / 'promo.sqlite3')
+            try:
+                action = req['action']
+                if action == 'promo-status':
+                    result = credit.status(time.time())
+                    if req.get('format') != 'json':
+                        result = Text(credit_line(result))
+                elif action == 'promo-prepare':
+                    result = credit.prepare(req['task'], time.time())
+                elif action == 'promo-dispatch':
+                    result = dispatch(credit, req['attempt'], req['text'], Native())
+                elif action == 'promo-bind':
+                    result = bind(credit, req['attempt'], req['session'], Native())
+                elif action == 'promo-send':
+                    result = send(credit, req['attempt'], req['text'], Native())
+                elif action == 'promo-claim-send':
+                    result = claim_send(credit, req['attempt'], req['text'], Native())
+                elif action == 'promo-settle':
+                    result = collect(credit, req['attempt'], Native())
+                else:
+                    raise ValueError('unsupported promo action')
+                print(result if isinstance(result, Text) else json.dumps(result, allow_nan=False))
+            finally:
+                credit.close()
+            return 0
         registered = registration()
         server = args.server or config.get('server') or (registered[0]['url'] if len(registered) == 1 else None)
         if server:
@@ -299,11 +342,23 @@ def main():
             raise ValueError('native OpenCode server required: use runway tool or --server http://127.0.0.1:PORT')
         ledger = Ledger(root / 'ledger.sqlite3')
         result = handle(req, config, ledger, LocalAPI(args.tarmac), host)
+        if req['action'] in ('status', 'usage') and (root / 'promo.sqlite3').exists():
+            from .promo import Credit, credit_line
+            credit = Credit(root / 'promo.sqlite3')
+            try:
+                status = credit.status(time.time())
+                if isinstance(result, Text):
+                    result = Text(str(result) + '\n' + credit_line(status))
+                elif isinstance(result, dict):
+                    result['credit'] = status
+            finally:
+                credit.close()
         print(result if isinstance(result, Text) else json.dumps(result, allow_nan=False, separators=(',', ':')))
         return 0
     except Exception as exc:
         # No raw HTTP body, credentials, provider errors, or request text in logs.
-        print(json.dumps({'error': str(exc) if isinstance(exc, ValueError) else type(exc).__name__,
+        print(json.dumps({'error': 'Runway request failed; no automatic resend; check input, approval and attempt state',
+                          'error_type': type(exc).__name__,
                           'dispatch_allowed': False}))
         return 1
     finally:
