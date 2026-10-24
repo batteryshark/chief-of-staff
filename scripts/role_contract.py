@@ -87,6 +87,7 @@ def permissions(role, home, brief, location=None, plans=(), project_docs=()):
         for resource in aliases(location, target) if location else [target]:
             rules.append(rule(action, resource))
     if role == 'chief':
+        rules += [rule('skill', name, 'deny') for name in ('norman','norman-audit')]
         grant('edit', brief + '/*'); grant('external_directory', brief + '/*')
         # Preserve the chief's existing relative memory abilities.
         for resource in ('brief.md', 'open.md', 'principal.md', 'ideas.md', 'models.md',

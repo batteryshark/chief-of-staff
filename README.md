@@ -160,3 +160,8 @@ Native runtime/goal-mode acceptance must be checked on your configured host sepa
 ## License
 
 Owned source and documentation are [MIT licensed](LICENSE). The included AI-generated comic artwork is offered under MIT to the extent applicable, without a claim of exclusive copyright in AI-generated material. [Rights](RIGHTS.md) and [dependency notices](THIRD_PARTY_NOTICES.md) describe the scope.
+# Portable local configuration
+
+Start with [Local setup](docs/LOCAL-SETUP.md): fresh Runway routes are empty;
+Nod routing and optional promotional-credit policy require explicit local inputs.
+No personal account grant, subscription roster or selected model IDs are installed by default.

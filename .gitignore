@@ -3,3 +3,7 @@
 __pycache__/
 node_modules/
 dist/
+/local-install.env
+/local-nod-options.json
+/local-promo-*.json
+/local-routes.json

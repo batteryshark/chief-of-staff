@@ -6,8 +6,21 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
-GRANT = 200_000_000  # integer micro-USD
-STOP = 180_000_000
+def validate_policy(value):
+    if (not isinstance(value, dict) or set(value) != {'grant_micro_usd', 'renewal_day'}
+            or type(value['grant_micro_usd']) is not int or value['grant_micro_usd'] <= 0
+            or value['grant_micro_usd'] > 1_000_000_000_000
+            or type(value['renewal_day']) is not int or not 1 <= value['renewal_day'] <= 28):
+        raise ValueError('promo policy requires positive integer grant_micro_usd and renewal_day 1..28')
+    return dict(value)
+
+
+def load_policy(path):
+    from pathlib import Path
+    try:
+        return validate_policy(json.loads(Path(path).read_text()))
+    except (OSError, ValueError):
+        raise ValueError('promo policy missing/invalid; configure local promo-policy.json before installation/use') from None
 ROUTES = {
     'api-fable': {'model': 'anthropic-promo/claude-fable-5-1', 'variant': 'high',
                   'purpose': 'independent-review'},
@@ -23,7 +36,7 @@ RATES = {'claude-fable-5-1': (10, 50, 20, .25),
          'claude-haiku-5-5': (.50, 2.50, 1, .05)}  # conservative long-context tier
 
 
-def cycle(now, renewal_day=26):
+def cycle(now, renewal_day):
     """UTC accounting convention only; not a claim about provider grant timing."""
     d = datetime.fromtimestamp(now, timezone.utc)
     start = d.replace(day=renewal_day, hour=0, minute=0, second=0, microsecond=0)
@@ -84,7 +97,11 @@ class Credit:
     Internal reservation primitive only. Not proof that native dispatch obeys a bound.
     Unknown liabilities survive rollover; cycles must be explicitly verified by parent.
     """
-    def __init__(self, path):
+    def __init__(self, path, policy=None):
+        from pathlib import Path
+        self.policy = validate_policy(policy) if policy is not None else load_policy(Path(path).parent / 'promo-policy.json')
+        self.grant = self.policy['grant_micro_usd']
+        self.stop = self.grant * 9 // 10
         self.db = sqlite3.connect(path, timeout=15, isolation_level=None)
         os.chmod(path, 0o600)
         self.db.executescript('''
@@ -100,20 +117,20 @@ class Credit:
 
     def verify_cycle(self, cid, baseline):
         # No automatic assertion of a fresh provider grant or zero outside consumption.
-        if type(baseline) is not int or not 0 <= baseline <= GRANT:
+        if type(baseline) is not int or not 0 <= baseline <= self.grant:
             raise ValueError('invalid known starting promo consumption')
         self.db.execute('INSERT INTO cycles VALUES (?, ?)', (cid, baseline))
 
     def status(self, now):
-        cid, expiry = cycle(now)
+        cid, expiry = cycle(now, self.policy['renewal_day'])
         row = self.db.execute('SELECT baseline FROM cycles WHERE id=?', (cid,)).fetchone()
         spent = (row[0] if row else 0) + self.db.execute(
             'SELECT coalesce(sum(actual),0) FROM holds WHERE cycle=?', (cid,)).fetchone()[0]
         held = self.db.execute('SELECT coalesce(sum(bound),0) FROM holds WHERE actual IS NULL').fetchone()[0]
         return {'label': 'promo', 'kind': 'local estimate, NOT provider balance',
-                'grant_usd': 200, 'spent_usd': spent / 1e6 if row else None,
-                'held_usd': held / 1e6, 'remaining_usd': max(0, GRANT-spent-held)/1e6 if row else None,
-                'stop_usd': 180, 'expiry': datetime.fromtimestamp(expiry, timezone.utc).date().isoformat() if row else None,
+                'grant_usd': self.grant / 1e6, 'spent_usd': spent / 1e6 if row else None,
+                'held_usd': held / 1e6, 'remaining_usd': max(0, self.grant-spent-held)/1e6 if row else None,
+                'stop_usd': self.stop / 1e6, 'expiry': datetime.fromtimestamp(expiry, timezone.utc).date().isoformat() if row else None,
                 'accounting_cycle_end_utc': datetime.fromtimestamp(expiry, timezone.utc).isoformat(),
                 'provider_expiry_time_verified': False,
                 'burn': 0 < expiry-now <= 3*86400, 'days_to_renewal': (expiry-now)/86400,
@@ -140,8 +157,8 @@ class Credit:
             used += self.db.execute('SELECT coalesce(sum(actual),0) FROM holds WHERE cycle=?',
                                     (s['cycle'],)).fetchone()[0]
             used += self.db.execute('SELECT coalesce(sum(bound),0) FROM holds WHERE actual IS NULL').fetchone()[0]
-            if used + bound > STOP:
-                raise ValueError('promo $180 stop; BURN/prefer cannot waive it')
+            if used + bound > self.stop:
+                raise ValueError(f'promo ${self.stop / 1e6:g} stop; BURN/prefer cannot waive it')
             self.db.execute('INSERT INTO holds VALUES (?, ?, ?, NULL, NULL)', (aid, s['cycle'], bound))
             if job is not None:
                 self.db.execute('INSERT INTO jobs VALUES (?,NULL,?)', (aid, json.dumps(job)))
@@ -186,24 +203,24 @@ class Credit:
     def authorize(self, now, approval, baseline=0):
         if (approval.get('console_backstop') is not True or approval.get('exclusive_key') is not True
                 or not isinstance(approval.get('reference'), str) or not approval['reference']
-                or approval.get('verified_cycle') != cycle(now)[0]):
+                or approval.get('verified_cycle') != cycle(now, self.policy['renewal_day'])[0]):
             raise ValueError('verified current-cycle Console backstop and exclusive-key authority required')
         # Called only by parent-authorized installer/cycle verification. No account effects.
         self.db.execute('BEGIN IMMEDIATE')
         try:
-            self.verify_cycle(cycle(now)[0], baseline)
-            self.db.execute('INSERT INTO authority VALUES (?,?)', (cycle(now)[0], json.dumps(approval)))
+            self.verify_cycle(cycle(now, self.policy['renewal_day'])[0], baseline)
+            self.db.execute('INSERT INTO authority VALUES (?,?)', (cycle(now, self.policy['renewal_day'])[0], json.dumps({**approval, 'policy': self.policy})))
             self.db.execute('COMMIT')
         except BaseException:
             self.db.execute('ROLLBACK')
             raise
 
     def require_authority(self, now):
-        row = self.db.execute('SELECT body FROM authority WHERE cycle=?', (cycle(now)[0],)).fetchone()
+        row = self.db.execute('SELECT body FROM authority WHERE cycle=?', (cycle(now, self.policy['renewal_day'])[0],)).fetchone()
         if not row:
             raise ValueError('current-cycle Console backstop approval required; renewal unverified')
         a = json.loads(row[0])
-        if a.get('console_backstop') is not True or a.get('exclusive_key') is not True:
+        if a.get('policy') != self.policy or a.get('console_backstop') is not True or a.get('exclusive_key') is not True:
             raise ValueError('Console backstop approval required')
 
     def prepare(self, task, now):
@@ -254,7 +271,7 @@ def digest(text):
 
 
 def credit_line(s):
-    return (f"CREDIT promo | grant $200 | spent {s['spent_usd']} | held {s['held_usd']} | "
+    return (f"CREDIT promo | grant ${s['grant_usd']:g} | spent {s['spent_usd']} | held {s['held_usd']} | "
             f"remaining {s['remaining_usd']} USD | expiry {s['expiry']} | "
             f"{'BURN' if s['burn'] else 'HOLD'} ~{s['days_to_renewal']:.1f} accounting days | "
             'local estimate, not provider balance; unverified cycles block admission')

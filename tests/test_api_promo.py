@@ -6,19 +6,40 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from runway.promo import Credit, STOP, absent_only, cycle, plan, usage_cost
+from runway.promo import Credit, absent_only, cycle, plan, usage_cost, validate_policy
 from runway.cli import handle
 
 NOW = datetime(2026, 10, 23, tzinfo=timezone.utc).timestamp()
 NEXT = datetime(2026, 10, 26, tzinfo=timezone.utc).timestamp()
+POLICY = {'grant_micro_usd': 200_000_000, 'renewal_day': 26}  # synthetic fixture, not installed
 
 
 class PromoTests(unittest.TestCase):
+    def test_local_policy_required_and_validated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'promo.sqlite3'
+            with self.assertRaisesRegex(ValueError, 'policy'):
+                Credit(path)
+            self.assertFalse(path.exists())
+            for policy in ({}, {'grant_micro_usd': True, 'renewal_day': 1},
+                           {'grant_micro_usd': -1, 'renewal_day': 1},
+                           {'grant_micro_usd': 10, 'renewal_day': 29}):
+                with self.assertRaises(ValueError):
+                    validate_policy(policy)
+            c = Credit(path, {'grant_micro_usd': 10_000_000, 'renewal_day': 1})
+            c.verify_cycle(cycle(NOW, 1)[0], 0)
+            self.assertEqual(c.status(NOW)['grant_usd'], 10)
+            self.assertEqual(c.status(NOW)['stop_usd'], 9)
+            c.reserve('boundary', 9_000_000, NOW)
+            with self.assertRaises(ValueError):
+                c.reserve('over', 1, NOW)
+            c.close()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / 'promo.sqlite3'
-        self.c = Credit(self.path)
-        self.c.verify_cycle(cycle(NOW)[0], 0)
+        self.c = Credit(self.path, POLICY)
+        self.c.verify_cycle(cycle(NOW, 26)[0], 0)
 
     def tearDown(self):
         self.c.close()
@@ -34,7 +55,7 @@ class PromoTests(unittest.TestCase):
     def test_concurrent_admission_atomic(self):
         self.c.close()
         def attempt(i):
-            c = Credit(self.path)
+            c = Credit(self.path, POLICY)
             try:
                 c.reserve(str(i), 20_000_000, NOW)
                 return True
@@ -44,7 +65,7 @@ class PromoTests(unittest.TestCase):
                 c.close()
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             results = list(pool.map(attempt, range(16)))
-        self.c = Credit(self.path)
+        self.c = Credit(self.path, POLICY)
         self.assertEqual(sum(results), 9)
 
     def test_idempotent_settlement_and_receipt_uniqueness(self):
@@ -72,7 +93,7 @@ class PromoTests(unittest.TestCase):
         self.assertFalse(self.c.status(NEXT)['cycle_verified'])
         with self.assertRaisesRegex(ValueError, 'unverified'):
             self.c.reserve('b', 1, NEXT)
-        self.c.verify_cycle(cycle(NEXT)[0], 170_000_000)
+        self.c.verify_cycle(cycle(NEXT, 26)[0], 170_000_000)
         with self.assertRaisesRegex(ValueError, '180'):
             self.c.reserve('b', 1, NEXT)
         self.assertEqual(self.c.status(NEXT)['held_usd'], 20)

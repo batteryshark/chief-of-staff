@@ -2,6 +2,9 @@
 {{MARKER}}
 """Ask through Nod; automatically wake the asking session with saved answer DATA.
 
+  chief-nod configure FILE (--expect-absent | --expect-sha256 SHA256)
+      Install noncredential local routing/retired-set options at the rendered brief path.
+      Example: chief-nod configure /private/local-nod-options.json --expect-absent
   chief-nod ask [FILE] [--recommended OPTION_ID] [--recommendation TEXT] [--dry-run]
       Chief only: create one linted decision card (FILE or stdin). Ordinary messages use nod-alert.
   Supply one question, 2–3 options with one-line outcome descriptions, recommended id and default.
@@ -12,7 +15,9 @@
   chief-nod decision REQUEST_ID [--wait [SECONDS]]
       Print the chosen option_id and any text. --wait long-polls up to 60 seconds (Nod's limit).
 
-Config: CHIEF_NOD_URL (else NOD_BASE_URL, else http://127.0.0.1:8767); channel from
+Routing: private {{BRIEF_DIR}}/nod-options.json is authoritative across isolated calls.
+Use configure --help to install local options; fresh users may set retired_sessions:[].
+Missing/malformed local options fail closed. Channel from
 CHIEF_NOD_CHANNEL or --channel (default "chief"); the Chief issuer token from CHIEF_NOD_TOKEN or the
 file CHIEF_NOD_TOKEN_FILE (default ~/.chief-of-staff/secrets/nod-chief.token). The token is never
 printed. `show` is an explicit private state read; runner/status never print answers.
@@ -31,6 +36,7 @@ from pathlib import Path
 import secrets
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -38,6 +44,7 @@ import time
 from contextlib import contextmanager
 import urllib.error
 import urllib.request
+import urllib.parse
 
 DEFAULT_URL = 'http://127.0.0.1:8767'
 DEFAULT_IMAGE_DIR = '~/.chief-of-staff/images'
@@ -48,7 +55,7 @@ ALLOWED = {'title', 'channel_id', 'recipients', 'decision_resolution', 'summary'
            'links', 'image_url', 'notification', 'dedupe_key', 'expires_at', 'options', 'callback_url',
            'template_id', 'template_version', 'variables', 'idempotency_key'}
 
-QUIET_CHIEF = os.environ.get('CHIEF_QUIET_SESSION', '')
+QUIET_CHIEF = 'ses_retired_chief'  # Synthetic fixture only; runtime uses explicit local options.
 # Captured when this process loads, not from the pathname after a live install.
 RUNNER_CODE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
@@ -67,6 +74,97 @@ class ReceiptRefusal(ValueError):
 
     def __init__(self, code):
         super().__init__(code + ': ' + self.REASONS[code])
+
+
+def options_path():
+    # Render persists only this path, never the operator's values or credentials.
+    return Path('{{BRIEF_DIR}}') / 'nod-options.json'
+
+
+def validate_options(value):
+    if (type(value) is not dict or set(value) != {'version', 'url', 'image_base', 'retired_sessions'}
+            or type(value['version']) is not int or value['version'] != 1):
+        raise ValueError('invalid local Nod options schema')
+    for key in ('url', 'image_base'):
+        text = value[key]
+        if type(text) is not str or len(text) > 2048 or any(ord(c) <= 32 for c in text):
+            raise ValueError('invalid local Nod URL')
+        if key == 'image_base' and text == '':
+            continue
+        parsed = urllib.parse.urlsplit(text)
+        if (parsed.scheme not in (('https',) if key == 'image_base' else ('http', 'https'))
+                or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
+                or '\\' in text):
+            raise ValueError('local Nod URLs must not carry credentials, queries or fragments')
+        try: parsed.port
+        except ValueError: raise ValueError('invalid local Nod URL port')
+    retired = value['retired_sessions']
+    if (type(retired) is not list or len(retired) > 100
+            or any(type(s) is not str or not re.fullmatch(r'ses_[A-Za-z0-9_-]{1,252}', s) for s in retired)
+            or len(set(retired)) != len(retired)):
+        raise ValueError('invalid local Nod retired session set')
+    return value
+
+
+def read_options(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise ValueError('local Nod options must be an owned private regular file (0600)')
+        raw = stream.read(4097)
+    if len(raw) > 4096:
+        raise ValueError('local Nod options exceed 4KiB')
+    return raw, validate_options(json.loads(raw))
+
+
+def local_options():
+    try:
+        return read_options(options_path())[1]
+    except FileNotFoundError:
+        raise ValueError('local Nod options missing; configure a private nod-options.json (empty retired_sessions is valid for fresh users)')
+
+
+def retired_chiefs():
+    return set(local_options()['retired_sessions'])
+
+
+def configure(args):
+    """Explicit operator install, not a card operation; no credential/state reads."""
+    _, value = read_options(Path(args.file))
+    path = options_path()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if path.parent.resolve() != path.parent.absolute() or path.parent.stat().st_uid != os.getuid() or path.parent.stat().st_mode & 0o022:
+        raise ValueError('owned canonical local Nod options directory required')
+    lockfd = os.open(path.parent / '.nod-options.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(lockfd, 'r+') as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise ValueError('owned private local Nod options lock required')
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try: previous, old = read_options(path)
+        except FileNotFoundError: previous, old = None, None
+        if args.expect_absent:
+            if previous is not None: raise ValueError('local Nod options already exist; use their reviewed SHA256')
+        elif previous is None or hashlib.sha256(previous).hexdigest() != args.expect_sha256:
+            raise ValueError('local Nod options preimage differs; review before retrying')
+        if old and not set(old['retired_sessions']) <= set(value['retired_sessions']):
+            raise ValueError('configuration cannot remove protected retired sessions')
+        raw = (json.dumps(value, sort_keys=True) + '\n').encode()
+        if len(raw) > 4096:
+            raise ValueError('serialized local Nod options exceed 4KiB; shorten before installing')
+        fd, temp = tempfile.mkstemp(prefix='.nod-options-', dir=path.parent)
+        try:
+            with os.fdopen(fd, 'wb') as out:
+                out.write(raw); out.flush(); os.fsync(out.fileno())
+            os.replace(temp, path)
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try: os.fsync(directory)
+            finally: os.close(directory)
+        finally:
+            if os.path.exists(temp): os.unlink(temp)
+    print('configured local Nod options; runtime calls load this file without shell exports')
+    return 0
 
 
 def stamp():
@@ -132,7 +230,7 @@ def binding(args):
         return None
     if not all(isinstance(x, str) and x.strip() for x in values):
         raise ValueError('continuation needs origin-session, origin-directory, reference and limits')
-    if not args.origin_session.startswith('ses_') or args.origin_session == QUIET_CHIEF:
+    if not args.origin_session.startswith('ses_') or args.origin_session in retired_chiefs():
         raise ValueError('invalid/quiet Chief origin')
     if not os.path.isabs(args.origin_directory):
         raise ValueError('origin directory must be absolute')
@@ -157,7 +255,7 @@ def register_local(data, rid, origin, handled=None):
 
 def native_origin(session, directory=None):
     """Read the app's authoritative session Location; never use chief.json or runner env."""
-    if not isinstance(session, str) or not session.startswith('ses_') or session == QUIET_CHIEF:
+    if not isinstance(session, str) or not session.startswith('ses_') or session in retired_chiefs():
         raise ValueError('asking session unavailable; use explicit --origin-session outside OpenCode')
     cli = shutil.which('chief-openchamber')
     if not cli:
@@ -261,7 +359,7 @@ def live_ops():
     path = Path(os.path.expanduser(os.environ.get('CHIEF_NOD_OPS_POINTER', '~/.chief-of-staff/chief.json')))
     pointer = json.loads(path.read_text())
     sid, directory = pointer.get('session'), pointer.get('directory')
-    if not isinstance(sid, str) or not sid.startswith('ses_') or sid == QUIET_CHIEF:
+    if not isinstance(sid, str) or not sid.startswith('ses_') or sid in retired_chiefs():
         raise ValueError('missing/invalid/quiet Chief Ops pointer')
     if not isinstance(directory, str) or not os.path.isabs(directory):
         raise ValueError('Ops directory must be absolute')
@@ -444,7 +542,7 @@ def continuation(args):
 
 
 def base_url():
-    return (os.environ.get('CHIEF_NOD_URL') or os.environ.get('NOD_BASE_URL') or DEFAULT_URL).rstrip('/')
+    return local_options()['url'].rstrip('/')
 
 
 def token():
@@ -638,6 +736,9 @@ def decision_card(request, option_id=None, recommendation=None):
 def publish_image(path, send):
     """Copy a local image into the chief-owned folder that `tailscale serve` exposes, tailnet only, and
     return its phone-loadable URL. The name is random, so the URL is unguessable; no auth header or query."""
+    base = local_options()['image_base'].rstrip('/')
+    if not base.startswith('https://'):
+        raise ValueError('image endpoint unavailable; configure image_base in private nod-options.json to the approved HTTPS image URL')
     path = os.path.expanduser(path)
     ext = os.path.splitext(path)[1].lower()
     try:
@@ -657,7 +758,7 @@ def publish_image(path, send):
             shutil.copyfile(path, os.path.join(folder, name))
         except OSError as e:
             sys.exit(f'chief-nod: cannot publish the image: {e.strerror}')
-    return os.environ.get('CHIEF_NOD_IMAGE_BASE', DEFAULT_IMAGE_BASE).rstrip('/') + '/' + name
+    return base + '/' + name
 
 
 def announce_tower(rid, row, save):
@@ -713,11 +814,18 @@ def ask(args):
     req.setdefault('channel_id', args.channel)
     image = args.image or req.pop('image_file', None)
     req.pop('image_file', None)
+    acceptance = acceptance_intent(args, req)
     req = decision_card(req, args.recommended, args.recommendation)
+    if acceptance:
+        # Recommendation remains in prose; exact acceptance choices stay unmodified.
+        for option in req['options']:
+            option['label'] = {'accept': 'Accept', 'not-yet': 'Not yet'}[option['id']]
     if args.dry_run:
         print(f'POST {base_url()}/api/v1/requests\n{json.dumps(req, indent=2)}')
         return 0
     sender = decision_sender(args)
+    if acceptance:
+        req['idempotency_key'] = 'chief-acceptance:' + digest({'binding': acceptance, 'issuer': sender, 'payload': req})
     origin = ask_binding(args, req)
     if not origin or any(origin[k] != sender[k] for k in ('session', 'directory')):
         raise ValueError('chief identity changed; no card sent')
@@ -732,7 +840,7 @@ def ask(args):
         if not isinstance(key, str) or not key.strip():
             raise ValueError('tracked ask needs a stable Nod idempotency_key (not pending-only dedupe_key)')
         with state() as (data, save):
-            intent = {'payload': req, 'origin': origin}
+            intent = {'payload': req, 'origin': origin, **({'acceptance': acceptance} if acceptance else {})}
             if key in data['creates']:
                 raise ValueError('create intent already exists; reconcile/backfill its known request ID; do not blindly POST')
             data['creates'][key] = dict(intent, state='possible-create', created_at=stamp())
@@ -743,7 +851,12 @@ def ask(args):
                 raise ValueError('create response missing request identity; reconcile without POST replay')
             if rid in data['requests']:
                 raise ValueError('server returned an already bound card; preserve its historical route/origin')
+            if acceptance and body.get('deduped') is True:
+                raise ValueError('acceptance create was deduplicated; reconcile exact original binding without adoption')
             row = register_local(data, rid, origin)
+            if acceptance:
+                row['acceptance'] = {**acceptance, 'request_id': rid,
+                                     'issuer': sender, 'issuance': 'chief-only-v1'}
             row['delivery_mode'] = 'origin-wake-v1'
             row['tower_announcement'] = {'state': 'publishing',
                                          'id': 'chief-nod-request-' + digest(rid), 'started_at': stamp()}
@@ -756,6 +869,79 @@ def ask(args):
         return 0
     body = call('POST', '/api/v1/requests', req)
     print('sent request_id=%s deduped=%s' % (body.get('request_id'), body.get('deduped')))
+    return 0
+
+
+def acceptance_intent(args, req):
+    project, outcome = getattr(args, 'accept_project', None), getattr(args, 'accept_outcome', None)
+    if project is None and outcome is None:
+        return None
+    if not all(isinstance(v, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,80}', v) for v in (project, outcome)):
+        raise ValueError('acceptance needs exact project and outcome IDs')
+    if not args.reference or len(args.reference) > 500:
+        raise ValueError('acceptance needs sanitized outcome reference')
+    if 'idempotency_key' in req or 'dedupe_key' in req:
+        raise ValueError('acceptance request identity is derived from outcome and chief binding')
+    options = req.get('options')
+    if (not isinstance(options, list) or len(options) != 2 or not all(isinstance(o, dict) for o in options)
+            or [(o.get('id'), o.get('label')) for o in options] != [('accept', 'Accept'), ('not-yet', 'Not yet')]):
+        raise ValueError('acceptance options must be exactly Accept / Not yet')
+    return {'project_id': project, 'outcome_id': outcome, 'reference': args.reference}
+
+
+def acceptance_projection(rid, row):
+    """Actual saved Nod answer only; independent of continuation delivery/ACK state."""
+    a = row.get('acceptance')
+    if (not isinstance(a, dict) or a.get('issuance') != 'chief-only-v1' or a.get('request_id') != rid
+            or a.get('issuer') != {k: row['origin'][k] for k in ('session','directory')}):
+        raise ValueError('not a chief-issued acceptance request')
+    snapshot = row.get('snapshot') or {}
+    requested_at = snapshot.get('created_at')
+    if not requested_at or snapshot.get('id') != rid:
+        raise ValueError('actual Nod request creation time unavailable')
+    result = {k: a[k] for k in ('project_id','outcome_id','reference','request_id')}
+    result['requested_at'] = requested_at
+    result.update(state='finished-awaiting-acceptance', request_state='pending', provenance='chief-only Nod answer projection')
+    decision = row.get('decision') or {}
+    # Conflicting per-recipient answers are unknown, never inferred acceptance.
+    answers = list(decision.get('decisions') or [])
+    if decision.get('decision') and decision['decision'] not in answers:
+        answers.append(decision['decision'])
+    if len(answers) > 1:
+        raise ValueError('ambiguous acceptance answers')
+    if answers:
+        answer = answers[0]
+        value = {'accept':'Accept','not-yet':'Not yet'}.get(answer.get('option_id'))
+        if not value or not answer.get('id') or not answer.get('created_at'):
+            raise ValueError('missing actual acceptance answer identity/time')
+        result.update(state='accepted' if value == 'Accept' else 'not-yet', request_state='answered', answer={
+            'type':'nod.answer','id':answer['id'],'request_id':rid,'project_id':a['project_id'],
+            'outcome_id':a['outcome_id'],'value':value,'answered_at':answer['created_at'],
+            'reference':'Nod answer '+answer['id'], 'provenance':'actual Nod response'})
+    elif decision.get('status') in ('expired','cancelled'):
+        result['request_state'] = decision['status']
+    elif decision.get('status') != 'pending':
+        raise ValueError('unknown request lifecycle')
+    return result
+
+
+def acceptance_status(args):
+    # Existing ledger API and reconcile populate this; export never fetches or delivers.
+    home = state_home()
+    if home.is_symlink() or home.stat().st_uid != os.getuid() or home.stat().st_mode & 0o077:
+        raise ValueError('private owned ledger required')
+    fd = os.open(home / 'state.json', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_nlink != 1:
+            raise ValueError('private owned ledger required')
+        raw = stream.read(4 * 1024 * 1024 + 1)
+    if len(raw) > 4 * 1024 * 1024:
+        raise ValueError('ledger bound')
+    data = json.loads(raw)
+    if data.get('version') != 1:
+        raise ValueError('unsupported ledger')
+    print(json.dumps(acceptance_projection(args.request_id, data['requests'][args.request_id])))
     return 0
 
 
@@ -813,6 +999,13 @@ def main():
     # bus-only routing even when an already-loaded native adapter is still cached.
     ap.add_argument('--answer-route', choices=('origin', 'heartbeat-bus'), default='origin', help=argparse.SUPPRESS)
     sub = ap.add_subparsers(dest='cmd', required=True)
+    config = sub.add_parser('configure', help='install private local Nod routing/retired-set options; no card or credential effect',
+        description='Persist noncredential routing and retired protections in this helper\'s rendered brief directory. No card is sent.',
+        epilog='Example: chief-nod configure /private/local-nod-options.json --expect-absent')
+    config.add_argument('file', help='owned private v1 options JSON input (no credentials)')
+    expected = config.add_mutually_exclusive_group(required=True)
+    expected.add_argument('--expect-absent', action='store_true', help='initial installation only; refuse an existing config')
+    expected.add_argument('--expect-sha256', help='reviewed current options SHA256; preserve all existing retired protections')
     a = sub.add_parser('ask', help='create a request from Nod request JSON')
     a.add_argument('file', nargs='?', help='request JSON file (default: stdin)')
     a.add_argument('--channel', default=os.environ.get('CHIEF_NOD_CHANNEL', 'chief'))
@@ -828,6 +1021,10 @@ def main():
         parser.add_argument('--reference', help='exact original private reference')
         parser.add_argument('--limits', help='exact authority/time/freshness/physical-hands limits')
     origin_flags(a)
+    a.add_argument('--accept-project', help='chief-only acceptance: exact Tower project ID')
+    a.add_argument('--accept-outcome', help='chief-only acceptance: exact Tower outcome ID')
+    d = sub.add_parser('acceptance-status', help='sanitized saved acceptance projection; no fetch/send/resume')
+    d.add_argument('request_id')
     d = sub.add_parser('decision', help='read or wait for the answer')
     d.add_argument('request_id')
     d.add_argument('--wait', nargs='?', type=int, const=55, metavar='SECONDS')
@@ -857,15 +1054,18 @@ def main():
             r.add_argument('--outcome', required=True, choices=('admission-observed', 'not-dispatched'))
     args = ap.parse_args()
     try:
-        result = (ask(args) if args.cmd == 'ask' else decision(args) if args.cmd == 'decision'
-                  else decision_json(args) if args.cmd == 'decision-json' else continuation(args))
+        result = (configure(args) if args.cmd == 'configure' else ask(args) if args.cmd == 'ask' else decision(args) if args.cmd == 'decision'
+                  else decision_json(args) if args.cmd == 'decision-json'
+                  else acceptance_status(args) if args.cmd == 'acceptance-status' else continuation(args))
     except ReceiptRefusal as error:
         sys.exit('chief-nod: ' + str(error) + '; inspect private state, never blind replay')
     except ValueError as error:
-        if args.cmd == 'ask':
+        if args.cmd in ('ask', 'configure'):
             sys.exit('chief-nod: ' + str(error))
         sys.exit('chief-nod: CONTINUATION_FAILED: continuation operation refused/failed; inspect private state and reconcile, never blind replay')
     except (OSError, KeyError, subprocess.TimeoutExpired):
+        if args.cmd == 'configure':
+            sys.exit('chief-nod: local options install failed; check the private 0600 input and owned brief directory, then see configure --help. No card sent.')
         sys.exit('chief-nod: CONTINUATION_FAILED: continuation operation refused/failed; inspect private state and reconcile, never blind replay')
     sys.exit(result)
 

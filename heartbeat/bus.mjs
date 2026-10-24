@@ -32,10 +32,10 @@ export class Bus {
     if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 8) throw Error('batchSize must be 1..8');
     this.root = root; this.now = now; this.batchSize = batchSize;
   }
-  async rows() {
+  async rows({ requireExisting = false } = {}) {
     let text;
     try { text = await readFile(path.join(this.root, 'events.jsonl'), 'utf8'); }
-    catch (e) { if (e.code === 'ENOENT') return []; throw e; }
+    catch (e) { if (e.code === 'ENOENT' && !requireExisting) return []; throw e; }
     // Do not hide torn/corrupt records. An operator must reconcile before resuming.
     if (text && !text.endsWith('\n')) throw Error('Incomplete journal tail; reconcile before resuming');
     return text.split('\n').filter(Boolean).map(line => JSON.parse(line));
@@ -206,7 +206,10 @@ export class Bus {
   }
   async inbox() {
     // A read is deliberately not a result, ACK, or close operation.
-    const rows = await this.rows(), s = state(rows);
+    let sourceComplete = false;
+    try { sourceComplete = (await stat(path.join(this.root, 'events.jsonl'))).isFile(); }
+    catch (e) { if (e.code !== 'ENOENT') throw e; }
+    const rows = await this.rows({requireExisting:sourceComplete}), s = state(rows);
     const pending = s.events.filter(e => !e.closed && e.urgency !== 'fyi')
       .sort((a,b) => a.at - b.at || a.id.localeCompare(b.id));
     const entries = [];
@@ -225,7 +228,8 @@ export class Bus {
         originalSummary: (e.text ?? '').slice(0, 240), detailEvent: e.id,
         ...(item.needsReconciliation ? { needsReconciliation: true, provenance: item.provenance } : {}) });
     }
-    return JSON.stringify({ entries, total: pending.length, omitted: pending.length - entries.length });
+    // Distinguish a genuinely initialized empty source from rows()' legacy ENOENT default.
+    return JSON.stringify({ entries, total: pending.length, omitted: pending.length - entries.length, sourceComplete });
   }
   async detail(event) {
     const rows = await this.rows(), original = state(rows).events.find(e => e.id === event);

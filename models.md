@@ -1,5 +1,10 @@
 # Model policy
 
+This is generic guidance, not a subscription roster or selectable-ID registry.
+Named models below are technical examples only; discover currently available IDs
+in your host and configure your own local Runway routes/accounts/windows. Fresh
+installs seed no selected routes. Record your actual subscriptions only locally.
+
 How models get picked, for the chief, the leads and their workers. There is no vendor loyalty.
 Pick the class of model the work needs, then pick within that class by who has usage left and how
 soon it resets. The chief keeps this file current whenever the principal says something new about

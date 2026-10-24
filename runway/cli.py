@@ -302,6 +302,11 @@ def main():
         if promo_action:
             from .promo import Credit, credit_line, plan
             from .promo_native import Native, dispatch, bind, send, claim_send, collect
+            if req['action'] in ('promo-plan', 'promo-prepare'):
+                selected = plan(req['task'])['selected']
+                if not any(all(route.get(k) == selected.get(k) for k in ('model', 'variant', 'purpose'))
+                           and route.get('id') == selected['route'] for route in config.get('api_routes', [])):
+                    raise ValueError('promo route not configured; review local api_routes and available model IDs first')
             if req['action'] == 'promo-plan':
                 print(json.dumps(plan(req['task'])))
                 return 0

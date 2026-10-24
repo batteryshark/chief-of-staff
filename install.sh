@@ -250,6 +250,7 @@ if [[ $resources == true && $mode != print ]]; then
 fi
 # Preflight every new skill target before any mutation of the existing bundle.
 if [[ $mode != print ]]; then python3 "$SRC/scripts/courtesy.py" check "${hosts[@]}"; fi
+if [[ $mode != print ]]; then python3 "$SRC/scripts/interface_skills.py" check "${hosts[@]}"; fi
 if [[ $resources == true ]]; then
   python3 "$SRC/scripts/install-resources.py" "$BRIEF_DIR" "$mode" "${hosts[@]}"
 fi
@@ -257,6 +258,7 @@ fi
 # before legacy mutations; never fall through to marker-based replace/delete.
 if [[ $mode == install || $mode == uninstall ]]; then
   python3 "$SRC/scripts/courtesy.py" "$mode" "${hosts[@]}"
+  python3 "$SRC/scripts/interface_skills.py" "$mode" "${hosts[@]}"
 fi
 for host in "${hosts[@]}"; do
   while IFS='|' read -r tmpl target prune; do

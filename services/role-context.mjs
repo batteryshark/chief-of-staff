@@ -8,7 +8,7 @@ export const skills = {
   lead: ['checkpoint', 'reset-*', 'upstream-courtesy', 'shape', 'deep-research',
     'opencode', 'delivery-outlook', 'comparative-review', 'report', 'pdf', 'docs',
     'docx', 'xlsx', 'pptx', 'google-workspace', 'built-in-browser', 'chrome-browser',
-    'computer-use', 'gpt-image', 'skill-creator'],
+    'computer-use', 'gpt-image', 'skill-creator', 'norman', 'norman-audit'],
   writer: ['checkpoint', 'deep-research', 'upstream-courtesy', 'gpt-image',
     'docs', 'docx', 'pdf', 'google-workspace', 'built-in-browser', 'chrome-browser'],
   dispatcher: [],

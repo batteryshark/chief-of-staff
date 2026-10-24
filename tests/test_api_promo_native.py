@@ -14,11 +14,12 @@ from runway.cli import main
 
 NOW = 1792713600  # 2026-10-23 UTC
 SOURCE = Path(__file__).resolve().parents[1]
+POLICY = {'grant_micro_usd': 200_000_000, 'renewal_day': 26}  # synthetic fixture
 
 
 def authority():
     return {'console_backstop': True, 'exclusive_key': True, 'reference': 'fixture-approval',
-            'baseline_micro_usd': 0, 'verified_cycle': cycle(NOW)[0]}
+            'baseline_micro_usd': 0, 'verified_cycle': cycle(NOW, 26)[0]}
 
 
 class FakeNative:
@@ -64,6 +65,7 @@ class NativeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
+        (self.root / 'promo-policy.json').write_text(json.dumps(POLICY))
         self.credit = Credit(self.root / 'promo.sqlite3')
         self.credit.authorize(NOW, authority())
         self.task = {'attempt': 'job-a', 'route': 'api-haiku-proof', 'purpose': 'proof',
@@ -205,6 +207,9 @@ class InstallTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
+        (self.root / 'promo-policy.json').write_text(json.dumps(POLICY))
+        (self.root / 'promo-opencode.json').write_text((SOURCE / 'routing/api-promo.opencode.json').read_text())
+        (self.root / 'promo-routes.json').write_text((SOURCE / 'routing/api-promo.routes.json').read_text())
         self.config = self.root / 'opencode.jsonc'
         self.original = '// untouched\n{\n "unknown": {"literal":"//not a comment"},\n "model":"claude-code/existing",\n "providers": { /* keep */ "claude-code": {"opaque":7}, },\n "agents": {}, "policies":[{"keep":true}],\n}\n'
         self.config.write_text(self.original)
@@ -227,14 +232,14 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(parsed[k], before[k])
         self.assertEqual(parsed['providers']['claude-code'], before['providers']['claude-code'])
         self.assertIn('/* keep */', self.config.read_text())
-        c = Credit(self.root / 'promo.sqlite3')
+        c = Credit(self.root / 'promo.sqlite3', POLICY)
         c.prepare({'attempt': 'a', 'route': 'api-opus', 'purpose': 'api-only',
                    'directory': str(self.root), 'text': 'Review'}, NOW)
         c.close()
         rollback(self.root)
         self.assertEqual(self.config.read_text(), self.original)
         self.assertEqual(self.routes.read_text(), '{"version":1,"routes":[],"unknown":true}\n')
-        c = Credit(self.root / 'promo.sqlite3')
+        c = Credit(self.root / 'promo.sqlite3', POLICY)
         self.assertEqual(c.status(NOW)['held_usd'], 6)
         with self.assertRaises(ValueError):
             c.require_authority(NOW)

@@ -47,7 +47,10 @@ def catalog_text(entries):
 
 
 def body(role, brief):
-    return (ROOT / f'kits/reset/{role}.md').read_text().replace('{{BRIEF_DIR}}', brief)
+    source = (ROOT / f'kits/reset/{role}.md').read_text()
+    if role == 'lead' and (len(source.splitlines()) > 36 or len(source.encode()) > 3076):
+        raise ValueError('lead working-habits replacement exceeds prior line/byte budget')
+    return source.replace('{{BRIEF_DIR}}', brief)
 
 
 def installed_startup(location):

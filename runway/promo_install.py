@@ -140,8 +140,13 @@ def install(source, config, root, approval, apply=False, now=None):
     if not config.parent.is_dir() or not root.is_dir() or root.is_symlink():
         raise ValueError('existing real config parent and Runway directory required')
     routes = root / 'routes.json'
-    proposed = json.loads((source / 'routing/api-promo.opencode.json').read_text())
-    policy = json.loads((source / 'routing/api-promo.routes.json').read_text())
+    # Explicit operator-reviewed local inputs, never silently install example model IDs.
+    proposed = json.loads(read(root / 'promo-opencode.json'))
+    policy = json.loads(read(root / 'promo-routes.json'))
+    from .promo import cycle, load_policy
+    local_policy = load_policy(root / 'promo-policy.json')
+    policy['promo'] = {**local_policy, 'new_work_stop_micro_usd': local_policy['grant_micro_usd'] * 9 // 10,
+                       'renewal_requires_confirmation': True}
     documents = [(config, {k: proposed[k] for k in ('providers', 'agents')}, True),
                  (routes, policy, False)]
     manifest, outputs = [], {}
@@ -165,8 +170,7 @@ def install(source, config, root, approval, apply=False, now=None):
     if (approval.get('console_backstop') is not True or approval.get('exclusive_key') is not True
             or not approval.get('reference') or approval.get('baseline_micro_usd') != 0):
         raise ValueError('verified backstop/exclusive-key/baseline authority required')
-    from .promo import cycle
-    if approval.get('verified_cycle') != cycle(now)[0]:
+    if approval.get('verified_cycle') != cycle(now, local_policy['renewal_day'])[0]:
         raise ValueError('authority cycle does not match current accounting cycle')
     if not apply:
         return {'dry_run': True, 'config_entries': ['providers.anthropic-promo', 'agents.api-promo-review'],

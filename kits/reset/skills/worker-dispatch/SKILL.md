@@ -31,7 +31,7 @@ identified owned runaway jobs, never broad pattern kills; report shared-host saf
 Change a running worker's route/scope only at a safe checkpoint, not by killing its work.
 
 Use an approximately 15-line brief, replacing placeholders with the actual assignment:
-1. Outcome and completion criteria.
+1. Outcome/completion; UI work: norman while building, norman-audit before acceptance.
 2. Project folder; assigned source checkout (tools use this checkout).
 3. Owned paths and other owners' protected paths.
 4. Existing decisions, holds and relevant failed approaches.

@@ -31,7 +31,12 @@ class ChiefNodTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('nod_contract', script)
         self.nod = importlib.util.module_from_spec(spec); spec.loader.exec_module(self.nod)
         (self.root/'chief.json').write_text(json.dumps({'session':'ses_chief','directory':str(self.root)}))
-        self.env = patch.dict(os.environ, {'OPENCODE_SESSION_ID':'ses_chief','CHIEF_NOD_STATE_DIR':str(self.root/'state')})
+        options=self.root/'nod-options.json'
+        options.write_text(json.dumps({'version':1,'url':'http://127.0.0.1:8767',
+            'image_base':'https://images.example/chief-images','retired_sessions':[self.nod.QUIET_CHIEF]}))
+        options.chmod(0o600)
+        self.env = patch.dict(os.environ, {'OPENCODE_SESSION_ID':'ses_chief','CHIEF_NOD_STATE_DIR':str(self.root/'state'),
+                                          'CHIEF_NOD_RETIRED_SESSION':self.nod.QUIET_CHIEF})
         self.env.start()
         self.bus_probe = patch.object(self.nod.socket, 'create_connection', side_effect=OSError('fixture offline'))
         self.bus_probe.start()
@@ -133,7 +138,7 @@ class ChiefNodTest(unittest.TestCase):
 
     def test_image_validation_and_read_only_decision_path(self):
         png=self.root/'pic.png';png.write_bytes(b'\x89PNG\r\n\x1a\n'+b'0'*20)
-        with patch.dict(os.environ,{'CHIEF_NOD_IMAGE_DIR':str(self.root/'images')}):
+        with patch.dict(os.environ,{'CHIEF_NOD_IMAGE_DIR':str(self.root/'images'),'CHIEF_NOD_IMAGE_BASE':'https://images.example/chief-images'}):
             self.nod.publish_image(str(png),False);self.assertFalse((self.root/'images').exists())
             url=self.nod.publish_image(str(png),True)
             self.assertEqual((self.root/'images'/url.rsplit('/',1)[1]).read_bytes(),png.read_bytes())

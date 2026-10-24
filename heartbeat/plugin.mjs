@@ -1,5 +1,6 @@
 import { Bus, state, claimDeadlineMs } from './bus.mjs';
-import { GoalWait } from './goal-wait.mjs';
+import { GoalWait, appMetadata } from './goal-wait.mjs';
+import { captureQuestionOrigin } from './question-status.mjs';
 import { projectHolds, standingPolicy, recipientEligibility } from './records.mjs';
 import { chiefSelection } from './chief.mjs';
 import { docketReader } from './timed-wait.mjs';
@@ -187,7 +188,10 @@ export async function setupHeartbeat(ctx, { onError = console.error, principalDe
         if (caller.id !== c.sessionID || caller.time?.archived) throw Error('Original posting identity archived/mismatched');
         if (o.originDirectories?.[c.sessionID] && o.originDirectories[c.sessionID] !== caller.location.directory) throw Error('Origin directory changed');
         await checkOrigin({sessionID:c.sessionID,directory:caller.location.directory});
-        const event = await bus.post(input, { sessionID: c.sessionID, directory: caller.location.directory });
+        // Native caller and native app goal at posting, never model-supplied strings.
+        // Missing metadata preserves posting/fallback but cannot certify question coverage.
+        const origin = await captureQuestionOrigin(caller, c.sessionID, async (sid, dir) => appMetadata()(sid, dir));
+        const event = await bus.post(input, origin);
         void tick();
         return { content: JSON.stringify({ id: event.id, status: 'recorded-not-approved' }) };
       } });

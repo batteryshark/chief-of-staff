@@ -1,5 +1,8 @@
 # API promotional routing — guarded API-only jobs
 
+Public setup requires explicit [local inputs](../docs/LOCAL-SETUP.md).
+Named API choices below are supported technical examples, not installed selections.
+
 Fresh text-only independent reviews use `api-fable` →
 `anthropic-promo/claude-fable-5-1#high`. Explicit API-only jobs use `api-opus` →
 `anthropic-promo/claude-opus-5-5`. `api-haiku-proof` is proof-only and accepts exactly
@@ -13,8 +16,9 @@ Direct manual provider use bypasses Runway accounting and is NOT budget protecte
 
 ## Accounting and limitations
 
-Separate SQLite `promo.sqlite3`: $200 promo grant, $180 spent+held+new-reservation
-stop; BEGIN IMMEDIATE admission, integer micro-USD, unique attempts and receipts.
+Separate SQLite `promo.sqlite3`: operator-configured promo grant and 90%
+spent+held+new-reservation stop; BEGIN IMMEDIATE admission, integer micro-USD,
+unique attempts and receipts. No default grant is asserted.
 Practical per-job estimates: Fable$12, Opus$6, Haiku proof$1. These are conservative
 estimates, NOT hard total native liabilities. Fable estimate allows roughly128k
 cache-creation-price input plus8192 output+reasoning per attempt across four attempts
@@ -38,7 +42,7 @@ instruction on the FIRST request, rejected by this Anthropic model as unsupporte
 prefill. Raising steps is not a second-request workaround. Natural text-only completion
 is expected; no tools, goals, autonomous continuation or automatic resend is allowed.
 This does not establish a hard whole-native-request bound; the Console-backed
-residual-risk acceptance and local reserves/$180 stop remain required.
+residual-risk acceptance and local reserves/90% stop remain required.
 
 Prepare atomically writes job digest/reservation. Bind validates exact native
 session metadata, model/variant, agent, location and empty history. Prompt state is
@@ -51,10 +55,10 @@ compaction traffic keep the full hold. Multiple clean assistant receipts are sum
 Incomplete native auxiliary usage remains a disclosed estimate limitation, not
 silently assumed zero. Bound estimate exceedance freezes further admission.
 
-Unknown holds survive rollover. UTC day26 is only the local accounting convention,
-NOT a fabricated provider timestamp. Every new cycle requires renewed private
-authority/baseline confirmation; no automatic grant is fabricated. Current date-only
-expiry26Oct2026. CREDIT promo shows grant/spent/held/remaining/expiry and BURN within
+Unknown holds survive rollover. The configured UTC renewal day is a local accounting
+convention, NOT a provider timestamp. Every new cycle requires renewed private
+authority/baseline confirmation; no automatic grant is fabricated.
+CREDIT promo shows grant/spent/held/remaining/expiry and BURN within
 3days. BURN/prefer cannot override cap or purpose. Paid loaded credits are never
 counted. Existing percent quotas/routes/ledger are untouched.
 
@@ -88,9 +92,10 @@ rollback receipt stores only inserted fields, positions, hashes and original mod
 Explicit file target avoids global config discovery. No secret substitution happens
 in installer code; only the native runtime reads the key later.
 
-Parent creates a private0600 JSON approval file (outside source) with:
+First configure the three local files described in Local setup above. Parent then
+creates a private0600 JSON approval file (outside source) with:
 `console_backstop:true`, `exclusive_key:true`, `baseline_micro_usd:0`,
-`reference:<owner approval reference>`, `verified_cycle:"2026-09-26T00:00:00+00:00"`.
+`reference:<owner approval reference>`, `verified_cycle:<confirmed current accounting cycle ID>`.
 The current cycle ID is an accounting label, not a provider renewal instant.
 
 From the kit root (choose the actual existing JSON or JSONC config;
@@ -121,7 +126,7 @@ cannot be blindly repeated over an existing counter/receipt. Parent reconciles i
 Legacy `steps:1` can fail HTTP400 (unsupported assistant prefill), without a
 token receipt. Do not manufacture zero usage or reuse a failed session as proof.
 Corrected tiny reruns and normal useful API request counts within the authorized
-$180 stop are lead-owned, not a new per-request approval gate. Unknown usage still
+local 90% stop require the operator's authority, not a universal approval. Unknown usage still
 retains its hold unless explicitly reconciled with owner authority and provenance;
 that reconciliation is not a native token receipt.
 No blind automatic retries: each send remains explicitly prepared/claimed once.

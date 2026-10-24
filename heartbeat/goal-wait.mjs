@@ -9,7 +9,7 @@ export function appMetadata(env = process.env) {
     u.pathname = `/api/openchamber/sessions/${encodeURIComponent(sessionID)}/metadata`;
     if (!patch) u.searchParams.set('directory', directory);
     const r = await fetch(u, { method: patch ? 'POST' : 'GET', headers: { authorization: `Bearer ${env.OPENCHAMBER_AGENT_TOOL_TOKEN}`, 'content-type': 'application/json' },
-      ...(patch ? { body: JSON.stringify({ directory, patch }) } : {}), signal: AbortSignal.timeout(5000) });
+      ...(patch ? { body: JSON.stringify({ directory, patch }) } : {}), redirect: 'error', signal: AbortSignal.timeout(5000) });
     if (!r.ok) throw Error(`OpenChamber metadata ${r.status}`);
     return (await r.json()).metadata;
   };
