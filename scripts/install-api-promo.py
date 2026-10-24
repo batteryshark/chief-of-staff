@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from runway.promo_install import install, rollback, amend
 
 if __name__ == '__main__':
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(description=__doc__, epilog='Fresh installs require local promo-policy.json, promo-opencode.json and promo-routes.json in --runway-home. See docs/LOCAL-SETUP.md; examples assert no grant or model availability.')
     p.add_argument('--config', type=Path)
     p.add_argument('--runway-home', type=Path, required=True)
     p.add_argument('--approval-file', type=Path)

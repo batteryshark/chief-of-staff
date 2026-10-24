@@ -140,7 +140,7 @@ class Credit:
 
     def reserve(self, aid, bound, now, job=None):
         if type(bound) is not int or not 0 < bound <= 20_000_000:
-            raise ValueError('liability must be positive and at most the $20 buffer')
+            raise ValueError('liability must be positive and at most the $20 per-job safety ceiling')
         self.db.execute('BEGIN IMMEDIATE')
         try:
             if job is not None:
@@ -152,7 +152,7 @@ class Credit:
                 raise ValueError('cycle grant/starting consumption unverified')
             if self.db.execute('SELECT 1 FROM holds WHERE id=?', (aid,)).fetchone():
                 raise ValueError('reservation id already used; never redispatch it')
-            # Both settled and all unresolved liabilities count against the $180 threshold.
+            # Both settled and all unresolved liabilities count against the local 90% threshold.
             used = self.db.execute('SELECT baseline FROM cycles WHERE id=?', (s['cycle'],)).fetchone()[0]
             used += self.db.execute('SELECT coalesce(sum(actual),0) FROM holds WHERE cycle=?',
                                     (s['cycle'],)).fetchone()[0]

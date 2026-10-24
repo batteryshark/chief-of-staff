@@ -1,5 +1,8 @@
 # Chief of staff
 
+Read [Local setup](docs/LOCAL-SETUP.md) before configuring tools: fresh Runway
+routes are empty; Nod and optional promo policy require explicit local inputs.
+
 <p><a href="assets/workstack-mark-full.png"><img src="assets/workstack-mark.png" alt="Chief comic mascot holding a project folder" width="180"></a></p>
 
 Chief of staff is an agent kit for people running several projects through AI leads. It keeps a cross-project brief, shapes new work with you, and delegates each agreed outcome to a lead who owns its plan, workers and verification.
@@ -160,8 +163,3 @@ Native runtime/goal-mode acceptance must be checked on your configured host sepa
 ## License
 
 Owned source and documentation are [MIT licensed](LICENSE). The included AI-generated comic artwork is offered under MIT to the extent applicable, without a claim of exclusive copyright in AI-generated material. [Rights](RIGHTS.md) and [dependency notices](THIRD_PARTY_NOTICES.md) describe the scope.
-# Portable local configuration
-
-Start with [Local setup](docs/LOCAL-SETUP.md): fresh Runway routes are empty;
-Nod routing and optional promotional-credit policy require explicit local inputs.
-No personal account grant, subscription roster or selected model IDs are installed by default.
