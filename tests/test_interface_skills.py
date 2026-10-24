@@ -62,10 +62,19 @@ chief:['norman','norman-audit'].some(n=>matches(n,skills.chief)),worker:roleFor(
         for name in installer.NAMES:
             self.assertIn({'action':'skill','resource':name,'effect':'deny'},permissions)
         source=(ROOT/'kits/reset/lead.md').read_text()
-        self.assertIn('norman build, norman-audit before acceptance',source)
+        self.assertNotIn('norman',source.lower())
         self.assertLessEqual(len(source.encode()),3076); self.assertLessEqual(len(source.splitlines()),36)
         brief=(ROOT/'kits/reset/skills/worker-dispatch/SKILL.md').read_text()
-        self.assertIn('UI work: norman while building, norman-audit before acceptance',brief)
+        self.assertIn('Pack: interface-design',brief)
+        self.assertIn('No role or UI keyword selects a pack automatically',brief)
+        self.assertIn('Functional checks remain required',brief)
+        for name in installer.NAMES:
+            raw=(installer.SOURCE/name/'SKILL.md').read_text()
+            front=raw.split('\n---\n',1)[0]
+            self.assertIn('Optional interface-design pack member.',front)
+            self.assertIn('opencode/autoinvoke: false',front)
+            self.assertIn('A UI task alone does not select this skill.',front)
+            self.assertIn('brief explicitly selects the pack or '+name,front)
         lean_roles.body('lead',str(self.home))
         install=(ROOT/'install.sh').read_text()
         self.assertIn('interface_skills.py" check',install); self.assertIn('interface_skills.py" "$mode"',install)

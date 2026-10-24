@@ -7,7 +7,8 @@
       Example: chief-nod configure /private/local-nod-options.json --expect-absent
   chief-nod ask [FILE] [--recommended OPTION_ID] [--recommendation TEXT] [--dry-run]
       Chief only: create one linted decision card (FILE or stdin). Ordinary messages use nod-alert.
-  Supply one question, 2–3 options with one-line outcome descriptions, recommended id and default.
+  Supply one question, 2–3 substantive options with outcomes, recommended id and no-answer default.
+  A canonical None of these chat option is added automatically; optional answer_field carries one typed value.
   Input AND rendered summary + body must fit 600 characters. Refusals never rewrite choices.
   Use short plain technical English (ASD-STE100 style); lint is not language certification.
   A local image (--image PATH or card "image_file") is copied to ~/.chief-of-staff/images, which `tailscale serve`
@@ -41,6 +42,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 from contextlib import contextmanager
 import urllib.error
 import urllib.request
@@ -53,7 +55,7 @@ DEFAULT_TOKEN_FILE = '~/.chief-of-staff/secrets/nod-chief.token'
 # Top-level fields POST /api/v1/requests accepts (Nod request-contract.md); it rejects anything else.
 ALLOWED = {'title', 'channel_id', 'recipients', 'decision_resolution', 'summary', 'body_markdown', 'fields',
            'links', 'image_url', 'notification', 'dedupe_key', 'expires_at', 'options', 'callback_url',
-           'template_id', 'template_version', 'variables', 'idempotency_key'}
+            'template_id', 'template_version', 'variables', 'idempotency_key', 'answer_field'}
 
 QUIET_CHIEF = 'ses_retired_chief'  # Synthetic fixture only; runtime uses explicit local options.
 # Captured when this process loads, not from the pathname after a live install.
@@ -653,13 +655,78 @@ IMAGE_TYPES = {'.png': b'\x89PNG\r\n\x1a\n', '.jpg': b'\xff\xd8\xff', '.jpeg': b
 IMAGE_LIMIT = 10 * 1024 * 1024
 
 
+NONE_OPTION = {'id': 'none-of-these', 'label': 'None of these', 'kind': 'custom',
+               'description': "I'll ask you in chat"}
+
+
+def validate_answer_field(field):
+    """Strict single-value wire definition; never supply an answer or coerce a value."""
+    def label(value, maximum):
+        if (type(value) is not str or not 1 <= len(value) <= maximum or value != value.strip()
+                or any(unicodedata.category(c) in ('Cc', 'Cs') for c in value)):
+            raise ValueError('answer_field labels must be trimmed, control-free text within their length limit')
+    if type(field) is not dict:
+        raise ValueError('answer_field must be one object; omit it for an ordinary card')
+    kind = field.get('kind')
+    if type(kind) is not str or kind not in ('choice', 'number', 'date', 'date_time'):
+        raise ValueError('answer_field kind must be choice, number, date or date_time')
+    if set(field) != {'kind', 'label', 'default'} | ({'choices'} if kind == 'choice' else set()):
+        raise ValueError('answer_field has missing or unsupported keys')
+    label(field['label'], 64)
+    default = field['default']
+    key = {'choice': 'choice_id', 'number': 'decimal', 'date': 'date', 'date_time': 'instant'}[kind]
+    if type(default) is not dict or set(default) != {'kind', key} or default['kind'] != kind:
+        raise ValueError('answer_field default must match its kind and exact tagged shape')
+    value = default[key]
+    if type(value) is not str:
+        raise ValueError('answer_field default value must be a string, not a number or null')
+    if kind == 'choice':
+        choices = field['choices']
+        if type(choices) is not list or not 2 <= len(choices) <= 12:
+            raise ValueError('answer_field choices need 2–12 unique id/label objects')
+        ids, labels = set(), set()
+        for choice in choices:
+            if type(choice) is not dict or set(choice) != {'id', 'label'}:
+                raise ValueError('answer_field choices need exact id/label objects')
+            ident = choice['id']
+            if type(ident) is not str or not re.fullmatch(r'[A-Za-z0-9_-]{1,40}', ident) or ident in ids:
+                raise ValueError('answer_field choice ids must be unique ASCII slugs of 1–40 characters')
+            label(choice['label'], 48)
+            if choice['label'] in labels:
+                raise ValueError('answer_field choice labels must be unique')
+            ids.add(ident); labels.add(choice['label'])
+        if value not in ids:
+            raise ValueError('answer_field default choice_id must name an existing choice')
+    elif kind == 'number':
+        if (not re.fullmatch(r'-?(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{0,5}[1-9])?', value)
+                or value == '-0'):
+            raise ValueError('answer_field decimal must be canonical: at most 12 integer and 6 fractional digits; no trailing zeros')
+    else:
+        pattern = r'[0-9]{4}-[0-9]{2}-[0-9]{2}' + (r'T[0-9]{2}:[0-9]{2}:00Z' if kind == 'date_time' else '')
+        if not re.fullmatch(pattern, value):
+            raise ValueError('answer_field date must be YYYY-MM-DD; date_time must be UTC YYYY-MM-DDTHH:MM:00Z')
+        try:
+            datetime.date.fromisoformat(value[:10])
+            if kind == 'date_time':
+                datetime.time(int(value[11:13]), int(value[14:16]))
+        except ValueError:
+            raise ValueError('answer_field default must be a real Gregorian date and UTC minute')
+    if len(json.dumps(field, ensure_ascii=False, separators=(',', ':')).encode('utf-8')) > 4096:
+        raise ValueError('answer_field definition exceeds 4096 UTF-8 bytes; shorten its labels')
+    return field
+
+
 def decision_card(request, option_id=None, recommendation=None):
     """Deterministic structure lint, not ASD-STE100 language certification.
 
     Count Unicode code points in summary + body, both before and after rendering.
-    Never shorten prose, insert choices, or infer a recommendation/default.
+    Never shorten prose or infer a recommendation/default; add the canonical chat escape.
     """
     req = json.loads(json.dumps(request))
+    if type(req) is not dict or set(req) - ALLOWED - CARD_KEYS:
+        raise ValueError('unsupported request fields; use answer_field for one typed value')
+    if 'answer_field' in req:
+        validate_answer_field(req['answer_field'])
     def line(value, name):
         if not isinstance(value, str) or not value.strip() or any(c in value for c in '\n\r\v\f\x85\u2028\u2029'):
             raise ValueError(f'{name}: supply one nonempty line')
@@ -673,9 +740,19 @@ def decision_card(request, option_id=None, recommendation=None):
     if any(k in req for k in ('approval', 'template_id', 'template_version', 'variables')) or req.get('notes') or req.get('tradeoff'):
         raise ValueError('supply 2–3 explicit options; no approval/template/extra-option expansion')
     options = req.get('options')
+    if isinstance(options, list):
+        supplied_none = [o for o in options if isinstance(o, dict) and
+                         (o.get('id') == NONE_OPTION['id'] or o.get('label') == NONE_OPTION['label'])]
+        if supplied_none and (len(supplied_none) != 1 or supplied_none[0] != NONE_OPTION):
+            raise ValueError('None of these must use the canonical id, label, custom kind and chat outcome')
+        options = [o for o in options if o not in supplied_none]
     if not isinstance(options, list) or not 2 <= len(options) <= 3:
         raise ValueError('decision needs 2–3 options; use nod-alert for ordinary messages')
     chosen = option_id or req.get('recommended')
+    if chosen == NONE_OPTION['id']:
+        raise ValueError('recommend a substantive option, not None of these')
+    options.append(dict(NONE_OPTION))
+    req['options'] = options
     default = line(req.get('default'), 'default if no answer')
     prose = [title, summary, body, default]
     if recommendation or req.get('recommendation'):
@@ -819,7 +896,8 @@ def ask(args):
     if acceptance:
         # Recommendation remains in prose; exact acceptance choices stay unmodified.
         for option in req['options']:
-            option['label'] = {'accept': 'Accept', 'not-yet': 'Not yet'}[option['id']]
+            if option['id'] in ('accept', 'not-yet'):
+                option['label'] = {'accept': 'Accept', 'not-yet': 'Not yet'}[option['id']]
     if args.dry_run:
         print(f'POST {base_url()}/api/v1/requests\n{json.dumps(req, indent=2)}')
         return 0
@@ -883,6 +961,11 @@ def acceptance_intent(args, req):
     if 'idempotency_key' in req or 'dedupe_key' in req:
         raise ValueError('acceptance request identity is derived from outcome and chief binding')
     options = req.get('options')
+    if isinstance(options, list):
+        canonical = [o for o in options if o == NONE_OPTION]
+        if len(canonical) > 1:
+            raise ValueError('acceptance allows only one canonical None of these option')
+        options = [o for o in options if o != NONE_OPTION]
     if (not isinstance(options, list) or len(options) != 2 or not all(isinstance(o, dict) for o in options)
             or [(o.get('id'), o.get('label')) for o in options] != [('accept', 'Accept'), ('not-yet', 'Not yet')]):
         raise ValueError('acceptance options must be exactly Accept / Not yet')
@@ -911,6 +994,8 @@ def acceptance_projection(rid, row):
         raise ValueError('ambiguous acceptance answers')
     if answers:
         answer = answers[0]
+        if answer.get('option_id') == 'none-of-these':
+            raise ValueError('None of these is unaccepted; ask in chat. No Accept / Not yet projection exists')
         value = {'accept':'Accept','not-yet':'Not yet'}.get(answer.get('option_id'))
         if not value or not answer.get('id') or not answer.get('created_at'):
             raise ValueError('missing actual acceptance answer identity/time')
@@ -982,11 +1067,23 @@ def decision(args):
         seconds = max(1, min(60, args.wait))
         body = call('GET', f'/api/v1/requests/{rid}/wait?timeout_seconds={seconds}', timeout=seconds + 10)
     print('status=%s' % body.get('status'))
-    chosen = [body['decision']] if body.get('decision') else body.get('decisions') or []
-    for d in chosen:
+    chosen = list(body.get('decisions') or [])
+    if body.get('decision') and body['decision'] not in chosen:
+        chosen.append(body['decision'])
+    for entry in chosen:
+        d = entry.get('decision') if 'decision' in entry else entry
+        if not isinstance(d, dict):
+            raise ValueError('answer wrapper needs an actual decision object')
+        if 'user_id' in entry:
+            print('user_id=' + json.dumps(entry['user_id'], ensure_ascii=False))
         print('option_id=%s' % d.get('option_id'))
         if d.get('text'):
             print('text=%s' % d['text'])
+        for key in ('answer_value', 'signature', 'actor', 'actor_user_id', 'actor_device_id'):
+            if key in d:
+                print(key + '=' + json.dumps(d[key], ensure_ascii=False))
+        if 'answer_value' in d or 'decision' in entry:
+            print('answer=' + json.dumps(entry, ensure_ascii=False))  # Exact wrapper and signed metadata.
     if not chosen:
         print('pending' + (' (wait timed out)' if body.get('timed_out') else ''))
         return 3

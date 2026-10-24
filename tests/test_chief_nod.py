@@ -86,7 +86,7 @@ class ChiefNodTest(unittest.TestCase):
             card=valid_card(); card['options']=[dict(card['options'][0],id=f'o{i}') for i in range(n)]
             self.assert_refused_without_effect(card)
         card=valid_card();card['options'].append({'id':'later','label':'Tomorrow','description':'Ship tomorrow.'})
-        result=self.nod.decision_card(card);self.assertEqual(len(result['options']),3)
+        result=self.nod.decision_card(card);self.assertEqual(len(result['options']),4)
 
     def test_outcomes_markers_and_forbidden_choices(self):
         for field in ('recommended','default'):
@@ -106,7 +106,7 @@ class ChiefNodTest(unittest.TestCase):
             self.assertEqual(self.invoke(card),0)
         api.assert_called_once();method,url,payload=api.call_args.args
         self.assertEqual((method,url),('POST','/api/v1/requests'))
-        self.assertEqual([o['id'] for o in payload['options']],['yes','no'])
+        self.assertEqual([o['id'] for o in payload['options']],['yes','no','none-of-these'])
         self.assertEqual(payload['options'][0]['label'],'Ship (Recommended)')
         self.assertIn('Default if no answer: No change.',payload['body_markdown'])
         self.assertNotIn('description',payload['options'][0]);self.assertEqual(card,before)
@@ -146,6 +146,73 @@ class ChiefNodTest(unittest.TestCase):
             self.nod.decision_json(argparse.Namespace(request_id='r1'))
             api.assert_called_once_with('GET','/api/v1/requests/r1/decision')
         self.assertFalse((self.root/'state').exists())
+
+    def test_strict_value_definitions(self):
+        fields = [
+            {'kind':'choice','label':'Size','choices':[{'id':'small','label':'小'}, {'id':'large','label':'大'}],
+             'default':{'kind':'choice','choice_id':'small'}},
+            *[{'kind':'number','label':'Count','default':{'kind':'number','decimal':s}}
+              for s in ('4','1.5','-0.25','999999999999.000001')],
+            {'kind':'date','label':'Day','default':{'kind':'date','date':'2028-02-29'}},
+            {'kind':'date_time','label':'Time','default':{'kind':'date_time','instant':'2026-10-25T09:30:00Z'}}]
+        for field in fields:
+            with self.subTest(field=field):
+                self.assertEqual(self.nod.decision_card(dict(valid_card(),answer_field=field))['answer_field'],field)
+        invalid = [None, [], {}, dict(fields[0],required=True), dict(fields[0],label=' Size'),
+                   dict(fields[0],label='x\x00'), dict(fields[0],label='x'*65),
+                   dict(fields[0],default={'kind':'choice','choice_id':'absent'}),
+                   dict(fields[0],choices=[fields[0]['choices'][0]]*2),
+                   dict(fields[0],choices=[{'id':'a','label':'same'}, {'id':'b','label':'same'}]),
+                   dict(fields[0],choices=[{'id':'é','label':'a'}, {'id':'b','label':'b'}])]
+        for decimal in (4,True,None,'-0','-0.0','+4','01','1.50','1e2',' 4','NaN','Infinity','1000000000000','1.0000001'):
+            invalid.append({'kind':'number','label':'Count','default':{'kind':'number','decimal':decimal}})
+        for field in fields:
+            invalid.extend([dict(field,default=None),dict(field,default={'kind':'other'}),dict(field,min='0')])
+        for day in ('2026-02-29','0000-01-01','2026-1-01'):
+            invalid.append({'kind':'date','label':'Day','default':{'kind':'date','date':day}})
+        for instant in ('2026-10-25T09:30:01Z','2026-10-25T09:30:00+00:00','2026-10-25T24:00:00Z'):
+            invalid.append({'kind':'date_time','label':'Time','default':{'kind':'date_time','instant':instant}})
+        for field in invalid:
+            with self.subTest(field=field): self.assert_refused_without_effect(dict(valid_card(),answer_field=field))
+        with patch.object(self.nod,'call') as api,patch.object(self.nod,'base_url') as url:
+            with self.assertRaises(ValueError):
+                self.invoke(dict(valid_card(),answer_field=None),self.args(dry_run=True))
+            api.assert_not_called();url.assert_not_called()
+        self.assert_refused_without_effect(dict(valid_card(),answer_fields=[]))
+
+    def test_canonical_none_is_once_visible_not_recommended(self):
+        card=valid_card();card['options'].append(dict(self.nod.NONE_OPTION))
+        result=self.nod.decision_card(card)
+        self.assertEqual(len(result['options']),3)
+        self.assertEqual(result['options'][-1],{k:v for k,v in self.nod.NONE_OPTION.items() if k!='description'})
+        self.assertIn("None of these: I'll ask you in chat",result['body_markdown'])
+        card['options'].append(dict(self.nod.NONE_OPTION));self.assert_refused_without_effect(card)
+        card=valid_card();card['recommended']='none-of-these';self.assert_refused_without_effect(card)
+        card=valid_card();card['options'].append(dict(self.nod.NONE_OPTION,label='Other'));self.assert_refused_without_effect(card)
+
+    def test_bound_acceptance_three_choices_and_none_fail_closed(self):
+        card={'title':'Accept this outcome?','default':'Wait.','recommended':'accept','options':[
+            {'id':'accept','label':'Accept','description':'Accept outcome.'},
+            {'id':'not-yet','label':'Not yet','description':'Keep open.'}]}
+        args=self.args(dry_run=True,accept_project='project',accept_outcome='outcome',reference='report')
+        output=io.StringIO()
+        with patch.object(self.nod.sys,'stdin',io.StringIO(json.dumps(card))),patch.object(self.nod.sys,'stdout',output):
+            self.assertEqual(self.nod.ask(args),0)
+        payload=json.loads(output.getvalue().split('\n',1)[1])
+        self.assertEqual([(o['id'],o['label']) for o in payload['options']],
+                         [('accept','Accept'),('not-yet','Not yet'),('none-of-these','None of these')])
+        card['options'].append(dict(self.nod.NONE_OPTION))
+        self.assertEqual(self.nod.acceptance_intent(args,card)['outcome_id'],'outcome')
+        origin={'session':'ses_chief','directory':'/fixture'}
+        row={'origin':origin,'acceptance':{'issuance':'chief-only-v1','issuer':origin,'request_id':'r1',
+             'project_id':'project','outcome_id':'outcome','reference':'report'},
+             'snapshot':{'id':'r1','created_at':'2026-10-24T00:00:00Z'}}
+        for option,value in [('accept','Accept'),('not-yet','Not yet'),('none-of-these',None)]:
+            row['decision']={'status':'resolved','decision':{'id':'answer','option_id':option,'created_at':'2026-10-24T01:00:00Z'}}
+            if value:
+                self.assertEqual(self.nod.acceptance_projection('r1',row)['answer']['value'],value)
+            else:
+                with self.assertRaisesRegex(ValueError,'unaccepted'): self.nod.acceptance_projection('r1',row)
 
 
 class ImageServerTest(unittest.TestCase):

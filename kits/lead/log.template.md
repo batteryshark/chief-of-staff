@@ -1,5 +1,18 @@
     # <Project>: lead log
 
+    Status: <short plain status>
+    Usable now: <what works now>
+    Left: <remaining work>
+    Waiting on: <owner or dependency, if any>
+    Needs you: false
+    Acceptance: <unfinished, finished-awaiting-acceptance, or actual chief answer>
+    Handed to: <next owner, if any>
+
+    ## Technical details
+    Principal fields above: one plain sentence each, about100characters; no hashes, IDs or jargon.
+    Needs you is true only for an explicit principal action; false otherwise. Omit unknown optional fields.
+    Keep technical evidence, identifiers and provenance below. Never infer acceptance from completion prose.
+
     Lead session <id> · {{OWNER_LOG}} · project doc <path to PROJECT.md>
 
     ## Goal

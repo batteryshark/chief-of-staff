@@ -31,7 +31,7 @@ identified owned runaway jobs, never broad pattern kills; report shared-host saf
 Change a running worker's route/scope only at a safe checkpoint, not by killing its work.
 
 Use an approximately 15-line brief, replacing placeholders with the actual assignment:
-1. Outcome/completion; UI work: norman while building, norman-audit before acceptance.
+1. Outcome/completion; explicitly name any optional pack selected by the brief author.
 2. Project folder; assigned source checkout (tools use this checkout).
 3. Owned paths and other owners' protected paths.
 4. Existing decisions, holds and relevant failed approaches.
@@ -46,6 +46,11 @@ Use an approximately 15-line brief, replacing placeholders with the actual assig
 13. Stay in the project folder; do not move the session unless asked.
 14. Report usable now / left first, then changed paths, checks and pending effects.
 15. Questions/results: session.send to <parent>, returnResult:true; if pending, end the turn.
+
+For designed human-facing interfaces, the brief author may explicitly select
+`Pack: interface-design` — load norman while building and norman-audit before the agreed
+acceptance check. No role or UI keyword selects a pack automatically; faithful remakes
+and debug/test pages do not imply selection. Functional checks remain required.
 
 Answer worker questions yourself; escalate only genuinely new authority or chief/principal choices.
 Relay answers to the original worker; reconcile results and pending effects before finish.

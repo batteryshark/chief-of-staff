@@ -85,12 +85,13 @@ class TowerExportTest(unittest.TestCase):
                 'answer':{'type':'nod.answer','id':'synthetic-answer','request_id':'synthetic-request','project_id':'project','outcome_id':'outcome',
                           'value':'Accept','answered_at':T1,'reference':'synthetic answer reference','provenance':'actual Nod response'}}
         def now(_):
-            self.assertEqual(reads,['knowledge','answer'])
+            self.assertIn(reads, (['knowledge'], ['knowledge','answer']))
             return datetime(2026,1,1,12,tzinfo=timezone.utc)
         with patch.object(export,'datetime') as clock:
             clock.now.side_effect=now
             out=export.build(self.row,reader,acceptance)
         self.assertEqual(out['generated_at'],'2026-01-01T12:00:00+00:00')
+        self.assertEqual(out['knowledge']['observed_at'],'2026-01-01T12:00:00+00:00')
         schema.projection(out,'project','outcome')
 
     def test_exact_native_plan_path_and_no_symlink_read(self):
@@ -254,7 +255,8 @@ class AcceptanceTest(unittest.TestCase):
         with patch.object(self.nod.sys,'stdin',io.StringIO(json.dumps(card))), patch.object(self.nod,'decision_sender',return_value=self.a['issuer']), patch.object(self.nod,'ask_binding',side_effect=bind), patch.object(self.nod,'state',state), patch.object(self.nod,'announce_tower'), patch.object(self.nod,'reconcile'), patch.object(self.nod,'call',return_value={'request_id':'request'}) as api, patch('builtins.print'):
             self.nod.ask(args)
         self.assertEqual(api.call_count,1)
-        self.assertEqual([(o['id'],o['label']) for o in api.call_args.args[2]['options']],[('accept','Accept'),('not-yet','Not yet')])
+        self.assertEqual([(o['id'],o['label']) for o in api.call_args.args[2]['options']],[('accept','Accept'),('not-yet','Not yet'),('none-of-these','None of these')])
+        self.assertEqual(api.call_args.args[2]['options'][-1],{'id':'none-of-these','label':'None of these','kind':'custom'})
         saved=data['requests']['request']
         self.assertEqual(saved['acceptance']['outcome_id'],'outcome')
         self.assertEqual(saved['acceptance']['issuance'],'chief-only-v1')

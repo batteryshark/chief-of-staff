@@ -36,6 +36,7 @@ class NodAlertTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.script = Path(self.tmp.name) / 'nod-alert'
         self.script.write_text(render.render('scripts/nod-alert', '/fixture/chief'))
+        self.script.with_name('chief-nod').write_text(render.render('scripts/chief-nod', '/fixture/chief'))
         Handler.status = 200
         SEEN.clear()
         self.server = HTTPServer(('127.0.0.1', 0), Handler)
@@ -82,6 +83,46 @@ class NodAlertTest(unittest.TestCase):
         self.assertIn('"channel_id": "default"', dry.stdout)
         self.assertEqual(SEEN, [])
 
+    def test_value_json_mode_uses_shared_lint_and_excludes_alert_flags(self):
+        card={'title':'Workers','answer_field':
+              {'kind':'number','label':'Count','default':{'kind':'number','decimal':'4'}},
+              'options':[{'id':'apply','label':'Apply','kind':'custom'}]}
+        source=Path(self.tmp.name)/'card.json';source.write_text(json.dumps(card))
+        out=self.run_cli('--request-json',str(source),'--dry-run')
+        self.assertEqual(out.returncode,0,out.stderr)
+        payload=json.loads(out.stdout.split('\n',1)[1])
+        self.assertEqual(payload,dict(card,channel_id='default'))
+        sent=self.run_cli('--request-json',str(source),NOD_ISSUER_TOKEN='fixture-token')
+        self.assertEqual(sent.returncode,0,sent.stderr)
+        self.assertEqual(SEEN[0][2]['answer_field'],card['answer_field'])
+        self.assertEqual(SEEN[0][2]['options'],card['options'])
+        SEEN.clear()
+        for flag in (['ordinary'],['--channel','default'],['--summary','text']):
+            out=self.run_cli('--request-json',str(source),*flag,'--dry-run')
+            self.assertNotEqual(out.returncode,0)
+        card['answer_field']['default']['decimal']='1.50';source.write_text(json.dumps(card))
+        out=self.run_cli('--request-json',str(source),'--dry-run')
+        self.assertNotEqual(out.returncode,0);self.assertNotIn('Traceback',out.stderr)
+        self.assertEqual(SEEN,[])
+
+    def test_generic_value_mode_rejects_unsupported_keys_templates_and_unsafe_outcomes(self):
+        card={'title':'Workers','answer_field':{'kind':'number','label':'Workers',
+              'default':{'kind':'number','decimal':'4'}},
+              'options':[{'id':'apply','label':'Apply','kind':'custom'}]}
+        invalid=[dict(card,answer_fields=[]),dict(card,template_id='expand'),dict(card,variables={}),
+                 dict(card,options=[]),dict(card,answer_field=None)]
+        for option in ({'id':'apply','label':'Apply','kind':'open'},
+                       {'id':'apply','label':'Apply','kind':'approve_with_text'},
+                       {'id':'apply','label':'Apply','kind':'custom','requires_text':True},
+                       {'id':'apply','label':'Apply','kind':'custom','destructive':True}):
+            invalid.append(dict(card,options=[option]))
+        source=Path(self.tmp.name)/'invalid.json'
+        for value in invalid:
+            source.write_text(json.dumps(value))
+            out=self.run_cli('--request-json',str(source),'--dry-run')
+            self.assertNotEqual(out.returncode,0,out.stdout)
+            self.assertNotIn('Traceback',out.stderr)
+        self.assertEqual(SEEN,[])
     def test_opencode_lead_may_read_exactly_the_home_infra_reference(self):
         lead = render.render('hosts/opencode-lead.md', '/fixture/chief')
         ref = str(Path.home() / '.local/share/chief-of-staff/home-infra.md')

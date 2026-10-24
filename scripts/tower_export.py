@@ -162,7 +162,8 @@ def project_knowledge(row, reader=knowledge_read):
                     if type(item.get('completed')) is not bool: raise ValueError('invalid native todo')
                     out['completed'] = item['completed']
             sanitize(out); items.append(out)
-        return {'state':'available','provenance':'OpenChamber Knowledge API','items':items}
+        return {'state':'available','provenance':'OpenChamber Knowledge API','items':items,
+                'observed_at':datetime.now(timezone.utc).isoformat()}
     except Exception:
         return {'state':'unavailable','provenance':'OpenChamber Knowledge API unavailable or approved items invalid'}
 
@@ -193,8 +194,12 @@ def build(row, reader=knowledge_read, acceptance=acceptance_read):
 def atomic_write(target, value):
     sanitize(value)
     raw = (json.dumps(value, ensure_ascii=False, separators=(',',':'))+'\n').encode()
+    atomic_bytes(target, raw, {'.json'})
+
+
+def atomic_bytes(target, raw, suffixes):
     if len(raw) > LIMIT: raise ValueError('projection bound')
-    rel = relative(target['path'], {'.json'}); fd = parent_fd(target['root'], rel)
+    rel = relative(target['path'], suffixes); fd = parent_fd(target['root'], rel)
     name = None
     try:
         try:

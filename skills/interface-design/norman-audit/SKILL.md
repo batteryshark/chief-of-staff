@@ -1,6 +1,8 @@
 ---
 name: norman-audit
-description: Audit an interface for design failures, from source alone — a changed diff or a whole workspace. Hunts eight failure classes (controls that never earned their place, orphaned capabilities, scentless labels, excise steps, recall demands, mute actions, slip traps, state amnesia) across screens, forms, navigation, CLI commands, and error messages, and returns ranked one-line findings with fixes, citing file and line. Use to audit an interface or UX, review an interface change, find out why users cannot find features, or decide what a UI should drop. Reports only; does not apply fixes. Not for code quality, correctness, or security review.
+description: Optional interface-design pack member. Load only when a brief explicitly selects the pack or norman-audit, or the user requests it. Audit interface design from source and report ranked findings without applying fixes. A UI task alone does not select this skill.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Norman audit

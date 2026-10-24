@@ -214,6 +214,39 @@ class ContinuationTest(unittest.TestCase):
         self.register()
         self.assertEqual(len(self.read()['requests']['r1']['events']), 1)
 
+    def test_typed_custom_answer_notes_signature_actor_and_per_user_survive(self):
+        field={'kind':'number','label':'Count','default':{'kind':'number','decimal':'4'}}
+        self.snapshot['answer_field']=field
+        self.answer['decision'].update(option_id='none-of-these',text='Ask me in chat',
+            answer_value={'kind':'number','decimal':'1.5'},signature={'version':2,'value':'fixture-signature'},
+            actor={'id':'fixture-user'})
+        chosen=self.answer.pop('decision')
+        self.answer.update(status='pending',decisions=[dict(chosen,user_id='fixture-user')])
+        self.register();self.register()
+        row=self.read()['requests']['r1'];eid,event=self.event()
+        self.assertEqual(len(row['events']),1)
+        self.assertEqual(row['snapshot']['answer_field'],field)
+        self.assertEqual(event['answer'],self.answer)
+        payload=self.nod.envelope('r1',row,eid,event)
+        self.assertIn('fixture-signature',payload);self.assertIn('none-of-these',payload)
+        self.assertIn('Ask me in chat',payload);self.assertIn('fixture-user',payload)
+        output=io.StringIO()
+        with patch.object(self.nod.sys,'stdout',output):
+            self.nod.continuation(argparse.Namespace(cmd='show',request_id='r1'))
+        self.assertEqual(json.loads(output.getvalue())['decision'],self.answer)
+        output=io.StringIO()
+        with patch.object(self.nod,'call',return_value=self.answer),patch.object(self.nod.sys,'stdout',output):
+            self.nod.decision_json(argparse.Namespace(request_id='r1'))
+        self.assertEqual(json.loads(output.getvalue()),self.answer)
+        output=io.StringIO()
+        with patch.object(self.nod,'call',return_value=self.answer),patch.object(self.nod.sys,'stdout',output):
+            self.nod.decision(argparse.Namespace(request_id='r1',wait=None))
+        self.assertIn('fixture-signature',output.getvalue());self.assertIn('1.5',output.getvalue())
+        self.assertIn('fixture-user',output.getvalue())
+        self.answer['decisions'][0]['answer_value']['decimal']='2.5'
+        self.register()
+        self.assertEqual(len(self.read()['requests']['r1']['events']),2)
+
     def test_canonical_pending_with_per_recipient_answer_is_not_lost(self):
         chosen = self.answer.pop('decision')
         self.answer.update(status='pending', decisions=[chosen])
@@ -222,6 +255,30 @@ class ContinuationTest(unittest.TestCase):
         self.answer.update(status='resolved', decision=chosen)
         self.register()
         self.assertEqual(len(self.read()['requests']['r1']['events']), 2)
+
+    def test_human_read_unwraps_per_user_decision_without_changing_raw_metadata(self):
+        nested={'id':'a1','option_id':'none-of-these','text':'Ask in chat',
+                'answer_value':{'kind':'number','decimal':'4'},'signature':{'bytes':'signed-fixture'},
+                'actor':{'id':'actor-fixture'},'actor_user_id':'actor-user','actor_device_id':'actor-device'}
+        wrapper={'user_id':'recipient-user','decision':nested,'extra_signed_metadata':{'keep':'exact'}}
+        reply={'request_id':'r1','status':'pending','decisions':[wrapper]}
+        before=json.dumps(reply,sort_keys=True)
+        output=io.StringIO()
+        with patch.object(self.nod,'call',return_value=reply),patch.object(self.nod.sys,'stdout',output):
+            self.nod.decision(argparse.Namespace(request_id='r1',wait=None))
+        text=output.getvalue()
+        for expected in ('option_id=none-of-these','text=Ask in chat','answer_value=',
+                         'signed-fixture','actor-fixture','actor_user_id="actor-user"',
+                         'actor_device_id="actor-device"','user_id="recipient-user"'):
+            self.assertIn(expected,text)
+        self.assertNotIn('option_id=None',text)
+        raw=next(line[7:] for line in text.splitlines() if line.startswith('answer='))
+        self.assertEqual(json.loads(raw),wrapper)
+        self.assertEqual(json.dumps(reply,sort_keys=True),before)
+        self.answer=reply
+        self.register()
+        self.assertEqual(self.event()[1]['answer'],reply)
+        self.assertEqual(self.read()['requests']['r1']['decision'],reply)
 
     def test_cancelled_expired_pending_without_answer_do_not_wake(self):
         for status in ('cancelled', 'expired', 'pending'):

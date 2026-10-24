@@ -1,6 +1,8 @@
 ---
 name: norman
-description: Apply interface-design principles while building any interface — screens, forms, flows, CLI commands, TUI views, error messages, empty states. Runs a five-question walkthrough on every surface: has it earned its place, can the user find it (name the signifier), what does it cost (count when countable), do they know it worked, does it survive first use, hundredth use, and interruption. Use when designing or changing an interface, when a flow feels circuitous, or when features keep going unfound. Not for pure visual styling, backend-only work, or prose that is not interface copy.
+description: Optional interface-design pack member. Load only when a brief explicitly selects the pack or norman, or the user requests it. Apply a five-question interface-design walkthrough while building. A UI task alone does not select this skill.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Norman

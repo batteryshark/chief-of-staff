@@ -21,6 +21,16 @@ Only genuine principal waits get Todos. Approved coarse Plans remain project pla
 Use supported tools and expected-old-body updates; denied access is a reported limitation,
 not permission to scrape backing stores, pick another ledger or bypass the denial.
 
+For registered Tower notes, chief/leads refresh the cache during normal work/checkpoints:
+`python3 -B ~/.local/share/chief-of-staff/tower/tower_refresh.py --knowledge ~/.chief-of-staff/tower/refresh-config.json`
+These are the normal installed script and existing explicit operator config convention;
+parent installs/renders those exact paths. If either is absent or inaccessible, skip and
+report the gap; never create/discover another config, install a fallback, or broaden access.
+This explicit command uses the inherited adapter and actual caller only. Never invent identity,
+persist transport credentials, create a config, or run it as a background/recurring model wake.
+On missing auth/access retain the last successful cache and its true age, and report the gap.
+File/milestone refresh is automatic; this native cache read is agent-context work, not a hook.
+
 Reconcile actual worker/session state and pending effects; idle is not proof of completion.
 For repository worktrees, use reset-worktree-safety: owned, quiescent, clean-only removal,
 branches preserved, no active cwd or other owner's data touched. Retain and record uncertainty.

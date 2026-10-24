@@ -63,15 +63,18 @@ def projection(x, project, outcome):
     if 'summary' in x:
         s = x['summary']
         if type(s) is not dict: raise ValueError('invalid summary')
-        if set(s) - {'observed_at','provenance','reference','usable now','left','waiting on','handed to'}:
+        if set(s) - {'observed_at','provenance','reference','usable now','left','waiting on','handed to','needs_you'}:
             raise ValueError('invalid summary fields')
+        if 'needs_you' in s and type(s['needs_you']) is not bool: raise ValueError('invalid needs_you')
         evidence(s)
         if stamp(s.get('observed_at')) > generated:
             raise ValueError('summary after generation')
         for k in ('usable now','left','waiting on','handed to'):
             if k in s: text(s[k], 2000)
     if 'knowledge' in x:
-        k = obj(x['knowledge'], 'state provenance items')
+        k = obj(x['knowledge'], 'state provenance items observed_at')
+        if 'observed_at' in k and stamp(k['observed_at']) > generated:
+            raise ValueError('knowledge after generation')
         text(k.get('provenance'))
         if k.get('state') not in ('available','unavailable') or (k['state'] == 'unavailable' and 'items' in k):
             raise ValueError('invalid knowledge state')

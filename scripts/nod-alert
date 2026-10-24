@@ -2,12 +2,18 @@
 {{MARKER}}
 """Send one plain alert card to Nod (POST /api/v1/requests). Synchronous; no retries, no service.
 
+Value card: nod-alert --request-json /absolute/card.json --dry-run (shared pure field lint).
+
 Config: NOD_BASE_URL (default http://127.0.0.1:8767), and the issuer token from
 NOD_ISSUER_TOKEN or the file named by NOD_ISSUER_TOKEN_FILE. The token is never printed or logged.
 """
 import argparse
 import json
+import importlib.machinery
+import importlib.util
 import os
+import re
+from pathlib import Path
 import sys
 import urllib.error
 import urllib.request
@@ -30,15 +36,60 @@ def token():
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    ap.add_argument('title', help='the alert in one sentence (max 200 characters)')
+    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0],
+        epilog='Value card example: nod-alert --request-json /absolute/card.json --dry-run. Requires sibling chief-nod.')
+    ap.add_argument('title', nargs='?', help='the alert in one sentence (max 200 characters)')
+    ap.add_argument('--request-json', help='one value card JSON file, or - for stdin; excludes ordinary alert flags')
     ap.add_argument('--summary', help='short scan line')
     ap.add_argument('--body', help='detail, Markdown')
-    ap.add_argument('--channel', default='default', help='channel id (default: default)')
+    ap.add_argument('--channel', help='channel id (default: default)')
     ap.add_argument('--dedupe-key', help='retry id for a pending request in the same channel')
     ap.add_argument('--dry-run', action='store_true', help='print the request and exit without sending')
     args = ap.parse_args()
-    payload = {'title': args.title, 'channel_id': args.channel}
+    if args.request_json:
+        if any(v is not None for v in (args.title, args.summary, args.body, args.channel, args.dedupe_key)):
+            ap.error('--request-json excludes title, --summary, --body, --channel and --dedupe-key')
+        try:
+            if args.request_json == '-':
+                payload = json.load(sys.stdin)
+            else:
+                with open(args.request_json) as source:
+                    payload = json.load(source)
+            # Share the installed sibling's pure lint; no chief identity, ledger or transport calls.
+            loader = importlib.machinery.SourceFileLoader('nod_alert_contract', str(Path(__file__).with_name('chief-nod')))
+            spec = importlib.util.spec_from_loader(loader.name, loader)
+            contract = importlib.util.module_from_spec(spec)
+            loader.exec_module(contract)
+            if type(payload) is not dict or 'answer_field' not in payload:
+                raise ValueError('--request-json needs one answer_field value card')
+            if set(payload) - contract.ALLOWED:
+                raise ValueError('unsupported request keys; use only server request fields')
+            if any(k in payload for k in ('template_id', 'template_version', 'variables')):
+                raise ValueError('value cards do not expand templates or variables')
+            contract.validate_answer_field(payload['answer_field'])
+            title = payload.get('title')
+            if type(title) is not str or not title.strip() or len(title) > 200:
+                raise ValueError('value card needs a nonempty title of at most 200 characters')
+            options = payload.get('options')
+            if type(options) is not list or not options:
+                raise ValueError('value card needs at least one ordinary outcome option, such as Apply')
+            ids = set()
+            for option in options:
+                if (type(option) is not dict or set(option) - {'id', 'label', 'kind'}
+                        or type(option.get('id')) is not str
+                        or not re.fullmatch(r'[A-Za-z0-9_-]{1,40}', option['id'])
+                        or option['id'] in ids or type(option.get('label')) is not str
+                        or not option['label'].strip()
+                        or option.get('kind', 'custom') not in ('custom', 'approve', 'reject')):
+                    raise ValueError('use unique id/label ordinary custom, approve or reject options; no destructive, open or requires-text outcomes')
+                ids.add(option['id'])
+            payload.setdefault('channel_id', 'default')
+        except (OSError, ValueError) as e:
+            ap.error('invalid value card: ' + str(e))
+    elif args.title is None:
+        ap.error('supply an alert title or --request-json FILE')
+    else:
+        payload = {'title': args.title, 'channel_id': args.channel or 'default'}
     if args.summary:
         payload['summary'] = args.summary
     if args.body:
@@ -61,4 +112,5 @@ def main():
     print('sent request_id=%s deduped=%s' % (body.get('request_id'), body.get('deduped')))
 
 
-main()
+if __name__ == '__main__':
+    main()

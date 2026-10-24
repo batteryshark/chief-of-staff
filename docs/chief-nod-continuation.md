@@ -18,13 +18,68 @@ Historical card origins, known-ID reads, answer wakes and uncertain attempts sta
 
 Use short plain technical English in ASD-STE100 style. Deterministic lint is not full
 language certification or semantic proof of a decision: it checks one question mark
-in displayed prose, 2–3 explicit options with one-line outcome descriptions, a named
+in displayed prose, 2–3 substantive options with one-line outcome descriptions, a named
 recommendation and stated no-answer default. No review/discuss/read-this choices.
 Input AND final summary + body are limited to600 Unicode code points, including
-generated outcomes/recommendation/default. No truncation, added options or inferred
-default. --dry-run validates without identity lookup or outward effects. Invalid asks
+generated outcomes/recommendation/default, including the automatic **None of these**
+custom option (`none-of-these`, outcome `I'll ask you in chat`). This option is outside
+the substantive count, appears exactly once, and cannot be recommended. Overflow
+refuses the card: shorten your prose; the helper never truncates or drops the escape.
+No inferred default. --dry-run validates without identity lookup or outward effects. Invalid asks
 fail before image publication, continuation intent/binding or HTTP. Ordinary messages
 and alerts continue through nod-alert; ask tells informational callers to use it.
+
+### One typed value, optional notes
+
+An optional top-level `answer_field` is a single strict object, not a display `fields`
+entry. Omit it for ordinary cards; null, arrays, `answer_fields`, unknown keys and
+bounds/required/scale/step/time-zone settings are refused. The exact forms are:
+
+```json
+{"kind":"choice","label":"Size","choices":[{"id":"small","label":"Small"},{"id":"large","label":"Large"}],"default":{"kind":"choice","choice_id":"small"}}
+{"kind":"number","label":"Count","default":{"kind":"number","decimal":"4"}}
+{"kind":"date","label":"Day","default":{"kind":"date","date":"2026-10-25"}}
+{"kind":"date_time","label":"Time","default":{"kind":"date_time","instant":"2026-10-25T09:30:00Z"}}
+```
+
+Field labels are trimmed/control-free, 1–64 Unicode scalars. Choice lists have 2–12
+unique ASCII slug IDs (1–40 characters) and unique labels (1–48 scalars). Defaults
+must match the kind and an existing choice ID. The definition fits 4096 UTF-8 bytes.
+Decimals are strings, never floats: at most 12 integer and 6 fractional digits,
+no leading zeros, trailing fractional zeros, plus, exponent, whitespace or negative
+zero. `4`, `1.5`, `-0.25` are valid; `1.50` is not. Dates are real Gregorian dates;
+date-times use UTC minutes with seconds exactly `00Z`.
+
+The typed field default is a client-visible initial value, **not** the existing
+`default` prose describing what happens with no answer. Neither authorizes action.
+The issuer never answers, signs, rounds or coerces. Optional answer notes remain
+`text`. New clients return signed tagged `answer_value` alongside option, text,
+signature and actor. Private show/decision-json/snapshots/events preserve the full
+object and per-user wrappers; human decision reads include the value and signed
+metadata. Semantic dedup includes these exact answer objects.
+
+For a non-chief issuer's value card, `nod-alert --request-json /absolute/card.json
+--dry-run` uses the same pure strict `answer_field` validator and server key allowlist
+from its installed sibling `chief-nod`, not the chief-ask prose policy.
+Use `-` instead of the file for stdin. This explicit mode requires `answer_field`
+and excludes the ordinary title/summary/body/channel/dedupe flags; put those fields
+in the JSON. A generic value card needs a nonempty title and at least one ordinary
+non-destructive, non-requires-text option (`id`, `label`, optional `kind` of `custom`,
+`approve` or `reject`). For example, title `Workers` with number default `4` and
+`{"id":"apply","label":"Apply","kind":"custom"}` works without a question,
+recommendation or no-answer prose default. Templates/variables and extra option
+keys are refused; JSON mode neither renders chief decision prose nor inserts None.
+Chief `ask` keeps its own 2–3 substantive options, automatic None and 600-character
+guards. Remove `--dry-run` only under existing card authority. Ordinary title
+alerts retain their existing behavior and do not gain choice options.
+
+Bound acceptance cards still require exact `accept` / `Accept` and `not-yet` /
+`Not yet` substantive options. The canonical automatic None option is permitted
+outside that binding, never renamed or recommended. Its real custom answer and
+chat outcome remain in continuation. Selecting it is **unaccepted**:
+`acceptance-status` refuses via the existing nonzero error route rather than
+inventing an Accept/Not yet answer, third enum, or pending lifecycle. Only actual
+bound Accept/Not yet answers with real answer ID/time are projected.
 
 ## Original-session wake (historical lead bindings retained)
 
