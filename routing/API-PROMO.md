@@ -20,11 +20,13 @@ Separate SQLite `promo.sqlite3`: operator-configured promo grant and 90%
 spent+held+new-reservation stop; BEGIN IMMEDIATE admission, integer micro-USD,
 unique attempts and receipts. No default grant is asserted.
 Practical per-job estimates: Fable$17 (≤32,768/HIGH), Opus$6, Haiku proof$1. These are conservative
-estimates, NOT hard total native liabilities. Fable estimate allows roughly128k
-cache-creation-price input plus8192 output+reasoning per attempt across four attempts
-(Fable $11.8784, Opus $4.75136 at128000 input tokens/attempt);
-Opus similarly conservative. Caller input is tiny, but runtime assembly is larger.
-Deny tools, explicit title, and request `max_tokens`8192 (Haiku32) reduce
+estimates, NOT hard total native liabilities. Fable estimates four worst-case native
+attempts, each with128000 cache-creation-price input tokens plus32768 combined
+output+reasoning tokens: $16.7936 rounded to $17. This estimate is not authorization
+for retries. Opus retains the provider8192 cap ($4.75136 across four such attempts);
+Haiku retains32. Caller input is tiny, but runtime assembly is larger.
+Deny tools, explicit title, and request caps (Fable32768/HIGH in operator-owned
+local inputs, Opus/provider8192, Haiku32) reduce
 amplification, not a claim to prove title/retry/warming/auxiliary traffic absent.
 Console backstop covers the principal-accepted residual risk; local accounting is
 NOT a provider balance and cannot see invisible/outside usage.
@@ -121,7 +123,7 @@ Rollback revokes local authority and restores only inserted bytes; preserves cou
 holds, receipts and journal. It never destroys unknown money liability. An install
 cannot be blindly repeated over an existing counter/receipt. Parent reconciles it.
 
-## Existing-install amendment (parent review/apply only)
+## Historical existing-install amendment (parent review/apply only)
 
 Legacy `steps:1` can fail HTTP400 (unsupported assistant prefill), without a
 token receipt. Do not manufacture zero usage or reuse a failed session as proof.
@@ -238,4 +240,4 @@ timer for the parent proof. Real Fable Tower review follows only after accepted 
 
 See [Fable headroom](FABLE-HEADROOM.md) for the final $17 reserve,
 operator-owned ≤32,768/HIGH prerequisite and atomic unsent cancellation.
-Historical rollout instructions below do not automatically migrate local inputs.
+Earlier rollout instructions do not automatically migrate local inputs.

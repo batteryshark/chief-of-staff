@@ -1,11 +1,13 @@
 # Fable admission and unsent cancellation
 
-New Fable admissions reserve $17. The conservative estimate is four turns at
-128,000 input tokens at $20/million plus 32,768 output tokens at $50/million:
-$16.7936. This bound requires the operator-owned provider input to enforce
+New Fable admissions reserve $17. The conservative estimate covers four worst-case
+native attempts; an estimate, not permission to retry. Each uses 128,000 input
+tokens at $20/million plus 32,768 combined output+reasoning tokens at $50/million:
+$16.7936. This estimate requires the operator-owned provider input to enforce
 `max_tokens <= 32768` and the HIGH variant. The generic provider example shows
 that cap; existing `promo-opencode.json` definitions are local and do not change
 automatically. Review local provider inputs before admitting new Fable work.
+This is not a hard whole-native liability bound; the Console backstop remains required.
 
 Existing holds, cycles and history are unchanged. Public grant, 90% stop and
 renewal policy remain operator-owned. Household hash-pinned rollout helpers are

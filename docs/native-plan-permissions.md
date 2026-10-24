@@ -31,6 +31,11 @@ Rollback requires the recorded exact postimage and metadata still present,
 the verified backup preimage, and the same guarded copy/replace/readback method;
 never overwrite intervening changes. Do not run the fleet installer for this fix.
 
+Changing project config may reload the Location and interrupt commands. Coordinate
+an owner-approved window and notify the active lead after apply. Explicitly inspect
+interrupted commands and decide whether to rerun them; never automatically replay
+operations.
+
 V2 FileAccess uses absolute resources for external files, including native plans
 outside the Location and project worktree. Historical Location-relative aliases
 are not evidence that new external grants need aliases. Keep the absolute grant
