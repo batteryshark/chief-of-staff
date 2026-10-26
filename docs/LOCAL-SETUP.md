@@ -33,8 +33,8 @@ admit; unresolved reservations, receipt history, output plus reasoning accountin
 and cycle authority remain durable. Renewal requires explicit verification.
 Missing/invalid policy fails closed before opening the database; an existing
 installation is NOT automatically migrated. Changing policy invalidates stored
-dispatch authority. Parent review must reconcile existing policy/authority and
-liabilities before deploying this public-only seam; no database is rewritten here.
+dispatch authority. Reconcile existing policy, authority and outstanding
+reservations before changing an installed configuration.
 
 ## Nod
 
@@ -44,14 +44,10 @@ optional approved HTTPS image base, and run `chief-nod configure FILE
 Use `configure --help` for reviewed updates; protected retired IDs cannot be
 removed. Ordinary isolated calls load persisted options without shell exports.
 
-## Portability inventory
+## Local data
 
-Newly local: promotion grant/renewal/derived stop, selected subscription route
-roster/accounts/windows, explicit optional API model/provider additions, and Nod
-routing/image/retired-session options. The old selected route roster is not
-installed; practical named provider support examples and synthetic tests remain.
-Already public-sanitized/local: household hosts/IPs, personal project/home paths,
-real Nod endpoints, chief identities and ledgers. None were newly discovered or
-migrated from a live installation. Generic Runway/Docket/Tower hooks, prompts,
-licenses and public ancestry remain. Both complete MIT Norman packages are
-vendored; installation does not need a private `_skills` tree.
+Configure accounts, usage windows, notification endpoints, image routes and
+session identities for your own installation. Examples are not active accounts
+or enrollments. Keep credentials and runtime state outside the source tree.
+The bundled interface-design packages include their licenses and do not require
+a separate shared-skills directory.
